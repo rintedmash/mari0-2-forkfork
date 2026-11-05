@@ -15,6 +15,10 @@ Currently, the first world of Super Mario Bros and the level editor are working.
 
 Developed for LÖVE 11.5
 
+## Android
+
+Touch controls are available in gameplay on touchscreens: the directional pad moves Mario, **A** jumps, and **B** runs/acts. The [GitHub Actions build](https://github.com/rintedmash/mari0-2-forkfork/actions/workflows/build.yml) produces a `.love` package and a debug APK for testing; the APK is not a Play Store release build.
+
 ## Credits
 
 - Nintendo - Super Mario assets

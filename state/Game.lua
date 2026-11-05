@@ -4,6 +4,7 @@ local Player = require "class.Player"
 local Level = require "class.Level"
 local LevelEdit = require "class.LevelEdit"
 local Mappack = require "class.Mappack"
+local TouchControls = require "lib.TouchControls"
 
 local Game = class("Game")
 
@@ -73,6 +74,10 @@ function Game:draw()
         ui:draw()
     end
     prof.pop("UI")
+
+    if self.uiVisible then
+        TouchControls.draw(SCREENWIDTH, SCREENHEIGHT)
+    end
 
     if VAR("debug").animatedTileCallbacks then
         for i, layer in ipairs(self.level.layers) do

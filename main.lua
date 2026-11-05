@@ -4,6 +4,8 @@ local lovetest = require "test/lovetest"
 require "errorhandler"
 require "loop"
 
+local TouchControls = require "lib.TouchControls"
+local touchOwners = {}
 local Game, Editor, Menus
 
 function love.load(arg)
@@ -245,6 +247,52 @@ function love.mousemoved(x, y, dx, dy)
     dx, dy = dx/VAR("scale"), dy/VAR("scale")
 
     gameStateManager:event("mousemoved", dx, dy)
+end
+
+function love.touchpressed(id, x, y)
+    local scale = VAR("scale")
+    if game and game.uiVisible and gameStateManager:hasActiveState(Game) and
+        TouchControls.press(id, x/scale, y/scale, SCREENWIDTH, SCREENHEIGHT, function(command)
+            gameStateManager:event("cmdpressed", {[command] = true})
+        end) then
+        touchOwners[id] = "control"
+        return
+    end
+
+    touchOwners[id] = {kind = "mouse", x = x, y = y}
+    love.mousepressed(x, y, 1)
+end
+
+function love.touchreleased(id, x, y)
+    local owner = touchOwners[id]
+    touchOwners[id] = nil
+
+    if owner == "control" then
+        TouchControls.release(id)
+    elseif owner then
+        love.mousereleased(x, y, 1)
+    end
+end
+
+function love.touchmoved(id, x, y, dx, dy)
+    local owner = touchOwners[id]
+    if owner and owner ~= "control" then
+        owner.x = x
+        owner.y = y
+        love.mousemoved(x, y, dx, dy)
+    end
+end
+
+function love.focus(focused)
+    if not focused then
+        TouchControls.reset()
+        for id, owner in pairs(touchOwners) do
+            if owner ~= "control" then
+                love.mousereleased(owner.x, owner.y, 1)
+            end
+            touchOwners[id] = nil
+        end
+    end
 end
 
 function love.resize(w, h)

@@ -3,6 +3,7 @@
 
 local controls3 = {}
 local cmds = {}
+local virtualCmds = {}
 
 local function assignCmd(v, cmd)
     if controls3.cmdTableLookup[cmd] then
@@ -15,6 +16,7 @@ end
 function controls3.setCmdTable(t)
     controls3.cmdTable = t
     controls3.cmdTableLookup = {}
+    virtualCmds = {}
 
     -- generate the cmdDown lookup table
     for key, cmd in pairs(t) do
@@ -83,9 +85,20 @@ function controls3.getCmdsForKey(key)
     return cmds, anyCmds
 end
 
+function controls3.setVirtualCmd(cmd, isDown)
+    virtualCmds[cmd] = not not isDown
+end
+
 -- ^ctrl !alt +shift
 function controls3.cmdDown(cmd)
-    local keys = controls3.cmdTableLookup[cmd]
+    if virtualCmds[cmd] then
+        return true
+    end
+
+    local keys = controls3.cmdTableLookup and controls3.cmdTableLookup[cmd]
+    if not keys then
+        return false
+    end
 
     for _, key in ipairs(keys) do
         local pass = true

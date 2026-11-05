@@ -1,0 +1,128 @@
+name: Validate and build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y luajit
+      - name: Compile Lua source files
+        run: |
+          while IFS= read -r -d '' file; do
+            luajit -b "$file" /dev/null
+          done < <(find . -type f -name '*.lua' -not -path './.git/*' -print0)
+      - name: Validate default environment
+        run: luajit -e 'local environment = dofile("environment.example.lua"); assert(type(environment.debug) == "table"); assert(environment.debug.mappack == "world-e"); assert(environment.scale == 3)'
+      - name: Test mobile controls
+        run: luajit -e 'lunatest = require "test.lunatest"; lunatest.suite("test.test_touchcontrols"); lunatest.run()'
+      - name: Package LÖVE game
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          import zipfile
+          from pathlib import Path
+
+          output = Path("dist/mari0-2.love")
+          output.parent.mkdir(parents=True, exist_ok=True)
+          files = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
+          with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as package:
+              for name in files:
+                  if name and not name.startswith(".github/") and name != "environment.example.lua":
+                      package.write(name, name)
+              package.write("environment.example.lua", "environment.lua")
+          with zipfile.ZipFile(output) as package:
+              required = {"main.lua", "environment.lua"}
+              missing = required.difference(package.namelist())
+              if missing:
+                  raise SystemExit(f"Required files are missing from the LÖVE package: {sorted(missing)}")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mari0-2-love
+          path: dist/mari0-2.love
+          if-no-files-found: error
+
+  android-apk:
+    needs: validate-and-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: mari0-2-love
+          path: dist
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Install Android build dependencies
+        run: |
+          set +o pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
+          set -o pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-34" "ndk;25.2.9519653" "cmake;3.22.1"
+      - name: Check out the official LÖVE Android runtime
+        uses: actions/checkout@v4
+        with:
+          repository: love2d/love-android
+          ref: "11.5"
+          submodules: recursive
+          path: love-android
+      - name: Embed the game and set app metadata
+        run: |
+          mkdir -p love-android/app/src/embed/assets
+          cp dist/mari0-2.love love-android/app/src/embed/assets/game.love
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path("love-android/gradle.properties")
+          updates = {
+              "app.name": "Mari0 2",
+              "app.name_byte_array": None,
+              "app.application_id": "com.wokitron.mari02",
+              "app.orientation": "landscape",
+              "app.version_code": os.environ["GITHUB_RUN_NUMBER"],
+              "app.version_name": f"0.1.{os.environ['GITHUB_RUN_NUMBER']}",
+          }
+          lines = []
+          found = set()
+          for line in path.read_text().splitlines():
+              stripped = line.strip()
+              key = stripped.split("=", 1)[0] if "=" in stripped and not stripped.startswith("#") else None
+              if key in updates:
+                  found.add(key)
+                  if updates[key] is not None:
+                      lines.append(f"{key}={updates[key]}")
+              else:
+                  lines.append(line)
+          for key, value in updates.items():
+              if key not in found and value is not None:
+                  lines.append(f"{key}={value}")
+          path.write_text("\n".join(lines) + "\n")
+          PY
+      - name: Build a no-microphone debug APK
+        run: |
+          cd love-android
+          ./gradlew --no-daemon assembleEmbedNoRecordDebug
+          mkdir -p ../dist/android
+          cp app/build/outputs/apk/embedNoRecord/debug/app-embed-no-record-debug.apk ../dist/android/mari0-2-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mari0-2-android-debug
+          path: dist/android/mari0-2-debug.apk
+          if-no-files-found: error
