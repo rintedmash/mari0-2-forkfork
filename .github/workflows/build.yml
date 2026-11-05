@@ -14,7 +14,7 @@ jobs:
   validate-and-package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install LuaJIT
         run: |
           sudo apt-get update
@@ -49,7 +49,7 @@ jobs:
               if missing:
                   raise SystemExit(f"Required files are missing from the LÖVE package: {sorted(missing)}")
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mari0-2-love
           path: dist/mari0-2.love
@@ -59,12 +59,19 @@ jobs:
     needs: validate-and-package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: mari0-2-love
           path: dist
-      - uses: actions/setup-java@v4
+      - name: Check out the official LÖVE Android runtime
+        uses: actions/checkout@v7
+        with:
+          repository: love2d/love-android
+          ref: "11.5"
+          submodules: recursive
+          path: love-android
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
@@ -75,13 +82,6 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
           set -o pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-34" "ndk;25.2.9519653" "cmake;3.22.1"
-      - name: Check out the official LÖVE Android runtime
-        uses: actions/checkout@v4
-        with:
-          repository: love2d/love-android
-          ref: "11.5"
-          submodules: recursive
-          path: love-android
       - name: Embed the game and set app metadata
         run: |
           mkdir -p love-android/app/src/embed/assets
@@ -121,7 +121,7 @@ jobs:
           ./gradlew --no-daemon assembleEmbedNoRecordDebug
           mkdir -p ../dist/android
           cp app/build/outputs/apk/embedNoRecord/debug/app-embed-no-record-debug.apk ../dist/android/mari0-2-debug.apk
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mari0-2-android-debug
           path: dist/android/mari0-2-debug.apk
