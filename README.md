@@ -1,6 +1,6 @@
 # Mari0 2
 
-[![AI-DECLARATION: copilot](https://img.shields.io/badge/䷼%20AI--DECLARATION-copilot-fee2e2?labelColor=fee2e2)](https://ai-declaration.md)
+[![AI-DECLARATION: auto](https://img.shields.io/badge/䷼%20AI--DECLARATION-auto-ede9fe?labelColor=ede9fe)](https://ai-declaration.md)
 
 <img width="400" height="224" alt="Promotional screenshot of the level editor showing 27 entities" src="https://github.com/user-attachments/assets/c42a7464-a82e-4dc8-9c40-007574e6eff0" />
 

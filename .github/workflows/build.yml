@@ -27,7 +27,7 @@ jobs:
       - name: Validate default environment
         run: luajit -e 'local environment = dofile("environment.example.lua"); assert(type(environment.debug) == "table"); assert(environment.debug.mappack == "world-e"); assert(environment.scale == 3)'
       - name: Test mobile controls
-        run: luajit -e 'lunatest = require "test.lunatest"; lunatest.suite("test.test_touchcontrols"); lunatest.run()'
+        run: luajit -e 'lunatest = require "test.lunatest"; lunatest.suite("test.test_actor_destroy"); lunatest.suite("test.test_jumping"); lunatest.suite("test.test_touchcontrols"); lunatest.run()'
       - name: Package LÖVE game
         run: |
           python3 - <<'PY'

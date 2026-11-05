@@ -231,19 +231,31 @@ function getWorldMouse()
     return love.mouse.getX()/VAR("scale"), love.mouse.getY()/VAR("scale")
 end
 
-function love.mousepressed(x, y, button)
+function love.mousepressed(x, y, button, istouch)
+    if istouch then
+        return
+    end
+
     x, y = x/VAR("scale"), y/VAR("scale")
 
     gameStateManager:event("mousepressed", x, y, button)
 end
 
-function love.mousereleased(x, y, button)
+function love.mousereleased(x, y, button, istouch)
+    if istouch then
+        return
+    end
+
     x, y = x/VAR("scale"), y/VAR("scale")
 
     gameStateManager:event("mousereleased", x, y, button)
 end
 
-function love.mousemoved(x, y, dx, dy)
+function love.mousemoved(x, y, dx, dy, istouch)
+    if istouch then
+        return
+    end
+
     dx, dy = dx/VAR("scale"), dy/VAR("scale")
 
     gameStateManager:event("mousemoved", dx, dy)
