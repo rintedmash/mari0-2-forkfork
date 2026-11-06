@@ -1,6 +1,10 @@
 local controls3 = require "lib.controls3"
 local TouchControls = require "lib.TouchControls"
 
+if not rawget(_G, "love") then
+    _G.love = {keyboard = {isDown = function() return false end}}
+end
+
 local function findButton(command, width, height, mode)
     for _, button in ipairs(TouchControls.getButtons(width, height, mode)) do
         if button.command == command then
