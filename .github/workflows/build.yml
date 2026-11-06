@@ -47,7 +47,7 @@ jobs:
           path = "dist/mari0-2.love"
           with zipfile.ZipFile(path) as package:
               files = set(package.namelist())
-              required = {"main.lua", "conf.lua", "environment.lua", "controls.lua"}
+              required = {"main.lua", "conf.lua", "environment.lua", "controls.lua", "lib/paletteShader.glsl"}
               missing = required - files
               if missing:
                   raise SystemExit(f"The LÖVE package is incomplete: {sorted(missing)}")
@@ -88,7 +88,7 @@ jobs:
           path = "dist/android/mari0-2-debug.apk"
           with zipfile.ZipFile(path) as apk:
               files = set(apk.namelist())
-              required = {"assets/main.lua", "assets/conf.lua", "assets/environment.lua"}
+              required = {"assets/main.lua", "assets/conf.lua", "assets/environment.lua", "assets/lib/paletteShader.glsl"}
               missing = required - files
               if missing:
                   raise SystemExit(f"The APK is missing embedded game files: {sorted(missing)}")
@@ -103,6 +103,7 @@ jobs:
     needs: android-apk
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: mari0-2-android-debug
@@ -125,7 +126,7 @@ jobs:
           arch: x86_64
           profile: pixel_7
           disable-animations: true
-          script: bash .github/scripts/android-smoke-test.sh
+          script: bash "$GITHUB_WORKSPACE/.github/scripts/android-smoke-test.sh"
       - uses: actions/upload-artifact@v7
         if: always()
         with:

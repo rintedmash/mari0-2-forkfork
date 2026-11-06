@@ -10,21 +10,29 @@ processes:
   review: auto
 components:
   .wiki.git: assist
-  class/Actor.lua: auto
-  components/smb3/animation.lua: copilot
-  .github/workflows/build.yml: auto  .github/scripts/android-smoke-test.sh: auto
   .github/android/res/drawable/love.png: auto
   .github/android/res/values/colors.xml: auto
+  .github/scripts/android-smoke-test.sh: auto
+  .github/workflows/build.yml: auto
   .gitignore: auto
-  makelove.toml: auto
   README.md: auto
+  class/Actor.lua: auto
+  components/smb3/animation.lua: copilot
   conf.lua: auto
+  errorhandler.lua: auto
+  lib/Physics3/World.lua: auto
   lib/TouchControls.lua: auto
   lib/controls3.lua: auto
+  lib/paletteShader.glsl: auto
+  lib/paletteShader.lua: auto
   main.lua: auto
+  makelove.toml: auto
+  state/Editor.lua: auto
   state/Game.lua: auto
-  test/test_touchcontrols.lua: auto  test/test_controls3.lua: auto
+  state/Menus.lua: auto
   test/test_actor_destroy.lua: auto
+  test/test_controls3.lua: auto
+  test/test_touchcontrols.lua: auto
 ---
 
 This format is based on [AI-DECLARATION.md](https://ai-declaration.md/en/0.1.2).
@@ -38,4 +46,5 @@ This format is based on [AI-DECLARATION.md](https://ai-declaration.md/en/0.1.2).
 - Earlier Copilot output was reviewed by a human
 - Zo Computer AI authored the mobile controls, tests, Android build workflow, and related documentation in this update
 - Zo Computer AI reviewed the Copilot-attributed actor and somersault changes; repeated actor destruction now returns without repeating cleanup
+- Zo Computer AI fixed a mobile shader compilation crash caused by initializing a uniform
 - All other assets are human-made

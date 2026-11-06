@@ -249,7 +249,7 @@ function TouchControls.getPointer()
 end
 
 function TouchControls.isSupported()
-    return love.touch and love.touch.isSupported and love.touch.isSupported()
+    return os.getenv("MARI0_FORCE_TOUCH_CONTROLS") == "1" or (love.touch and love.touch.isSupported and love.touch.isSupported()) or false
 end
 
 function TouchControls.draw(width, height, mode)

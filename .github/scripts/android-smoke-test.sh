@@ -1,4 +1,9 @@
 set -euo pipefail
+if [[ -n "${GITHUB_WORKSPACE:-}" ]]; then
+  cd "$GITHUB_WORKSPACE"
+else
+  cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+fi
 mkdir -p dist/android/smoke
 adb install -r dist/android/mari0-2-debug.apk
 adb shell am force-stop com.wokitron.mari02
@@ -6,6 +11,10 @@ adb logcat -c
 adb shell am start -n com.wokitron.mari02/org.love2d.android.GameActivity
 for attempt in {1..60}; do
   adb logcat -d > dist/android/smoke/wait-log.txt
+  if grep -Fq MARI0_2_ERROR dist/android/smoke/wait-log.txt; then
+    cat dist/android/smoke/wait-log.txt
+    exit 1
+  fi
   if grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/wait-log.txt; then
     break
   fi
@@ -67,7 +76,7 @@ adb logcat -d > dist/android/smoke/gameplay-input-log.txt
 for input in LEFT JUMP PORTAL1 PORTAL2 CLOSEPORTALS USE RUNLOCK; do
   grep -Fq "MARI0_2_TOUCH_${input}_OK" dist/android/smoke/gameplay-input-log.txt
 done
-if grep -E 'FATAL EXCEPTION|E/AndroidRuntime|UnsatisfiedLinkError|MARI0_2_STARTUP_ERROR' dist/android/smoke/gameplay-input-log.txt; then
+if grep -E 'FATAL EXCEPTION|E/AndroidRuntime|UnsatisfiedLinkError|MARI0_2_ERROR' dist/android/smoke/gameplay-input-log.txt; then
   exit 1
 fi
 adb exec-out screencap -p > dist/android/smoke/gameplay-input.png

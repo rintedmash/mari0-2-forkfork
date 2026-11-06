@@ -6,6 +6,10 @@ end
 
 function love.errorhandler(msg)
 	msg = tostring(msg)
+	print("MARI0_2_ERROR:" .. msg)
+	if io.stdout then
+		io.stdout:flush()
+	end
 
 	error_printer(msg, 2)
 

@@ -7,6 +7,9 @@ require "loop"
 local TouchControls = require "lib.TouchControls"
 local touchOwners = {}
 local touchInputLogged = {}
+local forceTouchControls = os.getenv("MARI0_FORCE_TOUCH_CONTROLS") == "1"
+local forcedMouseTouch = false
+local forcedMouseTouchId = "mari0-forced-desktop-touch"
 local Game, Editor, Menus
 
 function love.load(arg)
@@ -110,6 +113,9 @@ function love.load(arg)
 	print(love.timer.getTime() - gameStartTime)
     prof.enabled(true)
     print("MARI0_2_STARTUP_COMPLETE")
+    if io.stdout then
+        io.stdout:flush()
+    end
 end
 
 function newGame(mappack, editorEnabled, players)
@@ -234,6 +240,11 @@ function love.mousepressed(x, y, button, istouch)
     if istouch then
         return
     end
+    if forceTouchControls and button == 1 then
+        forcedMouseTouch = true
+        love.touchpressed(forcedMouseTouchId, x, y)
+        return
+    end
 
     TouchControls.clearPointer()
     x, y = x/VAR("scale"), y/VAR("scale")
@@ -245,6 +256,11 @@ function love.mousereleased(x, y, button, istouch)
     if istouch then
         return
     end
+    if forceTouchControls and button == 1 and forcedMouseTouch then
+        forcedMouseTouch = false
+        love.touchreleased(forcedMouseTouchId, x, y)
+        return
+    end
 
     x, y = x/VAR("scale"), y/VAR("scale")
 
@@ -253,6 +269,10 @@ end
 
 function love.mousemoved(x, y, dx, dy, istouch)
     if istouch then
+        return
+    end
+    if forceTouchControls and forcedMouseTouch then
+        love.touchmoved(forcedMouseTouchId, x, y, dx, dy)
         return
     end
 
@@ -279,6 +299,9 @@ local function markTouchInput(name)
     if not touchInputLogged[name] then
         touchInputLogged[name] = true
         print("MARI0_2_TOUCH_" .. name .. "_OK")
+        if io.stdout then
+            io.stdout:flush()
+        end
     end
 end
 
@@ -341,7 +364,7 @@ function love.touchpressed(id, x, y)
     end
 
     touchOwners[id] = {kind = "mouse", x = x, y = y}
-    love.mousepressed(x, y, 1)
+    gameStateManager:event("mousepressed", logicalX, logicalY, 1)
 end
 
 function love.touchreleased(id, x, y)
@@ -355,7 +378,8 @@ function love.touchreleased(id, x, y)
     elseif owner then
         TouchControls.setPointer(x / VAR("scale"), y / VAR("scale"))
         if owner.kind == "mouse" then
-            love.mousereleased(x, y, 1)
+            local scale = VAR("scale")
+            gameStateManager:event("mousereleased", x / scale, y / scale, 1)
         end
     end
 end
@@ -386,12 +410,13 @@ function love.touchmoved(id, x, y, dx, dy)
     TouchControls.setPointer(logicalX, logicalY)
     owner.x, owner.y = x, y
     if owner.kind == "mouse" then
-        love.mousemoved(x, y, dx, dy)
+        gameStateManager:event("mousemoved", dx / scale, dy / scale)
     end
 end
 
 function love.focus(focused)
     if not focused then
+        forcedMouseTouch = false
         for id, owner in pairs(touchOwners) do
             if owner ~= "control" and owner.kind == "mouse" then
                 love.mousereleased(owner.x, owner.y, 1)

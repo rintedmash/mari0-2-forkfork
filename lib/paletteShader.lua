@@ -4,12 +4,14 @@ local paletteShader = {}
 local sh_swap_colors = love.filesystem.read("lib/paletteShader.glsl")
 
 local shader = love.graphics.newShader(sh_swap_colors)
+shader:send("n", 0)
 
 function paletteShader.on(imgPalette, newPalette)
     if imgPalette then
-        shader:send("n", #imgPalette)
-        shader:sendColor("oldColors", unpack(imgPalette))
-        shader:sendColor("newColors", unpack(newPalette))
+        local count = math.min(#imgPalette, 4, #newPalette)
+        shader:send("n", count)
+        shader:sendColor("oldColors", unpack(imgPalette, 1, count))
+        shader:sendColor("newColors", unpack(newPalette, 1, count))
     end
 
     love.graphics.setShader(shader)
