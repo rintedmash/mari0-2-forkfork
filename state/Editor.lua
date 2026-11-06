@@ -1,6 +1,7 @@
 local EditorState = require "class.editor.EditorState"
 local Selection = require "class.editor.Selection"
 local FloatingSelection = require "class.editor.FloatingSelection"
+local TouchControls = require "lib.TouchControls"
 local Editor = class("Editor")
 
 local function insertTool(toolName)
@@ -375,6 +376,8 @@ function Editor:draw()
     love.graphics.push()
     love.graphics.origin()
     self.canvas:rootDraw()
+    love.graphics.scale(VAR("scale"), VAR("scale"))
+    TouchControls.draw(SCREENWIDTH, SCREENHEIGHT, "editor")
     love.graphics.pop()
 
     prof.pop()

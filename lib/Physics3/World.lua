@@ -2,6 +2,7 @@ local serialize = require "lib.serialize"
 local Cell = require((...):gsub('%.World$', '') .. ".Cell")
 local Tile = require((...):gsub('%.World$', '') .. ".Tile")
 local TileMap = require((...):gsub('%.World$', '') .. ".TileMap")
+local TouchControls = require "lib.TouchControls"
 local Portal = require((...):gsub('%.World$', '') .. ".portal.Portal")
 local World = class("Physics3.World")
 
@@ -1066,7 +1067,11 @@ function World:mouseToCoordinate()
 end
 
 function World:getMouse()
-    local x, y = love.mouse.getPosition()
+    local x, y = TouchControls.getPointer()
+    if x and y then
+        return x, y
+    end
+    x, y = love.mouse.getPosition()
     return x/VAR("scale"), y/VAR("scale")
 end
 

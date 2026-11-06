@@ -17,7 +17,7 @@ Developed for LÖVE 11.5
 
 ## Android
 
-Touch controls are available in gameplay on touchscreens: the directional pad moves Mario, **A** jumps, and **B** runs/acts. The [GitHub Actions build](https://github.com/rintedmash/mari0-2-forkfork/actions/workflows/build.yml) produces a `.love` package and a debug APK for testing; the APK is not a Play Store release build.
+Touch controls appear only on touchscreen devices and follow Mari0 GE’s layout: a left-side directional pad, **A** to jump, **B** to run, a run-lock toggle, **1/2** to fire portals toward the last touched aim point, **R** to close portals, **U** to use, and **Start** to begin or return to the menu. The desktop input-visualization overlay stays desktop-only. The [GitHub Actions workflow](https://github.com/rintedmash/mari0-2-forkfork/actions/workflows/build.yml) packages the game with `makelove`, builds an Android debug APK with the Marketplace LÖVE Android action, and installs/launches it in an emulator as a smoke test. The APK is for testing, not a Play Store release.
 
 ## Credits
 

@@ -76,7 +76,7 @@ function Game:draw()
     prof.pop("UI")
 
     if self.uiVisible then
-        TouchControls.draw(SCREENWIDTH, SCREENHEIGHT)
+        TouchControls.draw(SCREENWIDTH, SCREENHEIGHT, "game")
     end
 
     if VAR("debug").animatedTileCallbacks then

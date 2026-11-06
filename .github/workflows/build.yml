@@ -25,29 +25,32 @@ jobs:
             luajit -b "$file" /dev/null
           done < <(find . -type f -name '*.lua' -not -path './.git/*' -print0)
       - name: Validate default environment
-        run: luajit -e 'local environment = dofile("environment.example.lua"); assert(type(environment.debug) == "table"); assert(environment.debug.mappack == "world-e"); assert(environment.scale == 3)'
-      - name: Test mobile controls
-        run: luajit -e 'lunatest = require "test.lunatest"; lunatest.suite("test.test_actor_destroy"); lunatest.suite("test.test_jumping"); lunatest.suite("test.test_touchcontrols"); lunatest.run()'
-      - name: Package LÖVE game
         run: |
-          python3 - <<'PY'
-          import subprocess
+          cp environment.example.lua environment.lua
+          luajit -e 'local environment = dofile("environment.lua"); assert(type(environment.debug) == "table"); assert(environment.debug.mappack == "world-e"); assert(environment.scale == 3)'
+      - name: Run Lua unit tests
+        run: luajit -e 'lunatest = require "test.lunatest"; lunatest.suite("test.test_actor_destroy"); lunatest.suite("test.test_jumping"); lunatest.suite("test.test_touchcontrols"); lunatest.run()'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install makelove
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'setuptools<81' 'git+https://github.com/qixils/makelove.git@f11036a88ad75afc6dedc1547dfc3a41dd7496b3'
+      - name: Package the LÖVE game
+        run: |
+          python -m makelove
+          cp dist/makelove-build/love/mari0-2.love dist/mari0-2.love
+          python - <<'PY'
           import zipfile
-          from pathlib import Path
 
-          output = Path("dist/mari0-2.love")
-          output.parent.mkdir(parents=True, exist_ok=True)
-          files = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
-          with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as package:
-              for name in files:
-                  if name and not name.startswith(".github/") and name != "environment.example.lua":
-                      package.write(name, name)
-              package.write("environment.example.lua", "environment.lua")
-          with zipfile.ZipFile(output) as package:
-              required = {"main.lua", "environment.lua"}
-              missing = required.difference(package.namelist())
+          path = "dist/mari0-2.love"
+          with zipfile.ZipFile(path) as package:
+              files = set(package.namelist())
+              required = {"main.lua", "conf.lua", "environment.lua", "controls.lua"}
+              missing = required - files
               if missing:
-                  raise SystemExit(f"Required files are missing from the LÖVE package: {sorted(missing)}")
+                  raise SystemExit(f"The LÖVE package is incomplete: {sorted(missing)}")
           PY
       - uses: actions/upload-artifact@v7
         with:
@@ -64,67 +67,157 @@ jobs:
         with:
           name: mari0-2-love
           path: dist
-      - name: Check out the official LÖVE Android runtime
-        uses: actions/checkout@v7
+      - name: Build Android debug APK with embedded game
+        uses: love-actions/love-actions-android@eb670108676c0d37d88e3f67d8e22959bc6ba856
         with:
-          repository: love2d/love-android
-          ref: "11.5"
-          submodules: recursive
-          path: love-android
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-      - name: Install Android build dependencies
+          app-name: Mari0 2
+          bundle-id: com.wokitron.mari02
+          resource-path: .github/android/res
+          icon-specifier: "@drawable/love"
+          love-ref: "11.5"
+          love-patch: .github/android/no-microphone.patch
+          love-package: dist/mari0-2.love
+          product-name: mari0-2
+          version-string: "0.1.${{ github.run_number }}"
+          version-code: "${{ github.run_number }}"
+          output-folder: dist/android
+      - name: Verify the APK contains the game, not just the runtime
         run: |
-          set +o pipefail
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
-          set -o pipefail
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platform-tools" "platforms;android-34" "ndk;25.2.9519653" "cmake;3.22.1"
-      - name: Embed the game and set app metadata
-        run: |
-          mkdir -p love-android/app/src/embed/assets
-          cp dist/mari0-2.love love-android/app/src/embed/assets/game.love
           python3 - <<'PY'
-          import os
-          from pathlib import Path
+          import zipfile
 
-          path = Path("love-android/gradle.properties")
-          updates = {
-              "app.name": "Mari0 2",
-              "app.name_byte_array": None,
-              "app.application_id": "com.wokitron.mari02",
-              "app.orientation": "landscape",
-              "app.version_code": os.environ["GITHUB_RUN_NUMBER"],
-              "app.version_name": f"0.1.{os.environ['GITHUB_RUN_NUMBER']}",
-          }
-          lines = []
-          found = set()
-          for line in path.read_text().splitlines():
-              stripped = line.strip()
-              key = stripped.split("=", 1)[0] if "=" in stripped and not stripped.startswith("#") else None
-              if key in updates:
-                  found.add(key)
-                  if updates[key] is not None:
-                      lines.append(f"{key}={updates[key]}")
-              else:
-                  lines.append(line)
-          for key, value in updates.items():
-              if key not in found and value is not None:
-                  lines.append(f"{key}={value}")
-          path.write_text("\n".join(lines) + "\n")
+          path = "dist/android/mari0-2-debug.apk"
+          with zipfile.ZipFile(path) as apk:
+              files = set(apk.namelist())
+              required = {"assets/main.lua", "assets/conf.lua", "assets/environment.lua"}
+              missing = required - files
+              if missing:
+                  raise SystemExit(f"The APK is missing embedded game files: {sorted(missing)}")
           PY
-      - name: Build a no-microphone debug APK
-        run: |
-          cd love-android
-          ./gradlew --no-daemon assembleEmbedNoRecordDebug
-          mkdir -p ../dist/android
-          apk=$(find app/build/outputs/apk/embedNoRecord/debug -maxdepth 1 -type f -name '*.apk' -print -quit)
-          test -n "$apk"
-          cp "$apk" ../dist/android/mari0-2-debug.apk
       - uses: actions/upload-artifact@v7
         with:
           name: mari0-2-android-debug
           path: dist/android/mari0-2-debug.apk
           if-no-files-found: error
+
+  android-smoke-test:
+    needs: android-apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: mari0-2-android-debug
+          path: dist/android
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install screenshot verifier
+        run: python -m pip install Pillow
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install, launch, and exercise the APK
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            mkdir -p dist/android/smoke
+            adb install -r dist/android/mari0-2-debug.apk
+            adb shell am force-stop com.wokitron.mari02
+            adb logcat -c
+            adb shell am start -n com.wokitron.mari02/org.love2d.android.GameActivity
+            for attempt in $(seq 1 60); do
+              adb logcat -d > dist/android/smoke/wait-log.txt
+              if grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/wait-log.txt; then
+                break
+              fi
+              sleep 1
+            done
+            adb logcat -d > dist/android/smoke/startup-log.txt
+            grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/startup-log.txt
+            sleep 3
+            adb exec-out screencap -p > dist/android/smoke/menu.png
+            adb shell pidof com.wokitron.mari02 | tr -d '\r' | grep -q .
+            read -r start_x start_y left_x left_y jump_x jump_y portal1_x portal1_y portal2_x portal2_y runlock_x runlock_y close_x close_y use_x use_y unit_pixels <<< "$(python - <<'PY'
+            from PIL import Image
+            image = Image.open("dist/android/smoke/menu.png").convert("RGB")
+            pixels = list(image.resize((80, 36)).getdata())
+            assert len(set(pixels)) > 32, "Menu screenshot appears blank"
+            assert sum(max(pixel) > 40 for pixel in pixels) / len(pixels) > 0.08, "Menu screenshot appears blank"
+            source = image.load()
+            left, top = image.width, image.height
+            right = bottom = 0
+            for y in range(0, image.height, 4):
+                for x in range(0, image.width, 4):
+                    if max(source[x, y]) > 40:
+                        left = min(left, x)
+                        top = min(top, y)
+                        right = max(right, x + 1)
+                        bottom = max(bottom, y + 1)
+            viewport_width = right - left
+            viewport_height = bottom - top
+            assert viewport_width * viewport_height > image.width * image.height * 0.25, "Could not locate the LÖVE viewport"
+            unit = min(viewport_width / 400, viewport_height / 224)
+            start_x, start_y = left + round(viewport_width - 26.5 * unit), top + round(13 * unit)
+            left_x, left_y = left + round(26 * unit), top + round(174 * unit)
+            jump_x, jump_y = left + round(viewport_width - 29 * unit), top + round(viewport_height - 40 * unit)
+            portal1_x, portal1_y = left + round(18.5 * unit), top + round(85.5 * unit)
+            portal2_x, portal2_y = left + round(18.5 * unit), top + round(113.5 * unit)
+            runlock_x, runlock_y = left + round(viewport_width - 120.5 * unit), top + round(viewport_height - 17.5 * unit)
+            close_x, close_y = left + round(18.5 * unit), top + round(141.5 * unit)
+            use_x, use_y = left + round(viewport_width - 120.5 * unit), top + round(viewport_height - 42.5 * unit)
+            print(start_x, start_y, left_x, left_y, jump_x, jump_y, portal1_x, portal1_y, portal2_x, portal2_y, runlock_x, runlock_y, close_x, close_y, use_x, use_y, round(unit))
+            PY
+            )"
+            adb shell input tap "$start_x" "$start_y"
+            sleep 5
+            adb logcat -d > dist/android/smoke/gameplay-log.txt
+            grep -Fq MARI0_2_TOUCH_START_OK dist/android/smoke/gameplay-log.txt
+            adb exec-out screencap -p > dist/android/smoke/gameplay.png
+            adb shell input swipe "$left_x" "$left_y" "$((left_x + 10 * unit_pixels))" "$left_y" 1200
+            adb shell input tap "$jump_x" "$jump_y"
+            sleep 2
+            adb shell pidof com.wokitron.mari02 | tr -d '\r' | grep -q .
+            adb shell input tap "$portal1_x" "$portal1_y"
+            adb shell input tap "$portal2_x" "$portal2_y"
+            adb shell input tap "$close_x" "$close_y"
+            adb shell input tap "$use_x" "$use_y"
+            adb shell input tap "$runlock_x" "$runlock_y"
+            sleep 1
+            adb shell pidof com.wokitron.mari02 | tr -d '\r' | grep -q .
+            adb logcat -d > dist/android/smoke/gameplay-input-log.txt
+            grep -Fq MARI0_2_TOUCH_LEFT_OK dist/android/smoke/gameplay-input-log.txt
+            grep -Fq MARI0_2_TOUCH_JUMP_OK dist/android/smoke/gameplay-input-log.txt
+            grep -Fq MARI0_2_TOUCH_PORTAL1_OK dist/android/smoke/gameplay-input-log.txt
+            grep -Fq MARI0_2_TOUCH_PORTAL2_OK dist/android/smoke/gameplay-input-log.txt
+            grep -Fq MARI0_2_TOUCH_CLOSEPORTALS_OK dist/android/smoke/gameplay-input-log.txt
+            grep -Fq MARI0_2_TOUCH_USE_OK dist/android/smoke/gameplay-input-log.txt
+            grep -Fq MARI0_2_TOUCH_RUNLOCK_OK dist/android/smoke/gameplay-input-log.txt
+            if grep -E 'FATAL EXCEPTION|E/AndroidRuntime|UnsatisfiedLinkError|MARI0_2_STARTUP_ERROR' dist/android/smoke/gameplay-input-log.txt; then
+              exit 1
+            fi
+            adb exec-out screencap -p > dist/android/smoke/gameplay-input.png
+            python - <<'PY'
+            from PIL import Image, ImageChops
+            menu = Image.open("dist/android/smoke/menu.png").convert("RGB").resize((80, 36))
+            gameplay = Image.open("dist/android/smoke/gameplay.png").convert("RGB").resize((80, 36))
+            diff = ImageChops.difference(menu, gameplay)
+            changed = sum(max(pixel) > 24 for pixel in diff.getdata()) / (80 * 36)
+            assert changed > 0.02, "Start button did not transition from the menu into gameplay"
+            image = Image.open("dist/android/smoke/gameplay-input.png").convert("RGB").resize((80, 36))
+            pixels = list(image.getdata())
+            assert len(set(pixels)) > 32, "Gameplay screenshot appears blank"
+            PY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mari0-2-android-smoke-test
+          path: dist/android/smoke/
+          if-no-files-found: ignore

@@ -6,6 +6,7 @@ require "loop"
 
 local TouchControls = require "lib.TouchControls"
 local touchOwners = {}
+local touchInputLogged = {}
 local Game, Editor, Menus
 
 function love.load(arg)
@@ -89,6 +90,7 @@ function love.load(arg)
     gameStateManager = GameStateManager3:new()
 
     love.resize(400*VAR("scale"), 224*VAR("scale"))
+    TouchControls.setPointer(SCREENWIDTH / 2, SCREENHEIGHT / 2)
 
     -- Alright let's go do the stuff
 	selectedMappackPath = VAR("debug").mappack
@@ -107,6 +109,7 @@ function love.load(arg)
 
 	print(love.timer.getTime() - gameStartTime)
     prof.enabled(true)
+    print("MARI0_2_STARTUP_COMPLETE")
 end
 
 function newGame(mappack, editorEnabled, players)
@@ -178,7 +181,7 @@ function love.draw()
     gameStateManager:event("draw")
 
     -- For the stream
-    if VAR("debug").input then
+    if VAR("debug").input and not TouchControls.isSupported() then
         setColorBasedOn("up")
         love.graphics.rectangle("fill", 16, SCREENHEIGHT-32, 8, 8)
         setColorBasedOn("left")
@@ -228,6 +231,10 @@ function love.textinput(text)
 end
 
 function getWorldMouse()
+    local x, y = TouchControls.getPointer()
+    if x and y then
+        return x, y
+    end
     return love.mouse.getX()/VAR("scale"), love.mouse.getY()/VAR("scale")
 end
 
@@ -236,6 +243,7 @@ function love.mousepressed(x, y, button, istouch)
         return
     end
 
+    TouchControls.clearPointer()
     x, y = x/VAR("scale"), y/VAR("scale")
 
     gameStateManager:event("mousepressed", x, y, button)
@@ -256,18 +264,85 @@ function love.mousemoved(x, y, dx, dy, istouch)
         return
     end
 
+    TouchControls.clearPointer()
     dx, dy = dx/VAR("scale"), dy/VAR("scale")
 
     gameStateManager:event("mousemoved", dx, dy)
 end
 
+local function currentTouchMode()
+    if Editor and gameStateManager:hasActiveState(Editor) then
+        return "editor"
+    end
+    if Game and gameStateManager:hasActiveState(Game) then
+        if not game.uiVisible then
+            return "aim"
+        end
+        return "game"
+    end
+    return "menu"
+end
+
+local function markTouchInput(name)
+    if not touchInputLogged[name] then
+        touchInputLogged[name] = true
+        print("MARI0_2_TOUCH_" .. name .. "_OK")
+    end
+end
+
+local function handleTouchCommand(command, button, phase, mode)
+    if command == "start" and phase == "press" then
+        if mode == "menu" then
+            newGame(selectedMappackPath, false, 1)
+            if gameStateManager:hasActiveState(Game) then
+                markTouchInput("START")
+            end
+        else
+            returnToMenu()
+        end
+    elseif button.mouseButton then
+        local x, y = TouchControls.getPointer()
+        if not x or not y then
+            x, y = SCREENWIDTH / 2, SCREENHEIGHT / 2
+        end
+        if phase == "press" then
+            markTouchInput(string.upper(command))
+            gameStateManager:event("mousepressed", x, y, button.mouseButton)
+        elseif phase == "release" then
+            gameStateManager:event("mousereleased", x, y, button.mouseButton)
+        end
+    elseif phase == "press" and button.toggle == "run" then
+        markTouchInput("RUNLOCK")
+    elseif phase == "press" and button.emitOnPress then
+        if command == "jump" and controls3.cmdDown("jump") then
+            markTouchInput("JUMP")
+        elseif command ~= "jump" then
+            markTouchInput(string.upper(command))
+        end
+        gameStateManager:event("cmdpressed", {[command] = true})
+    end
+end
+
 function love.touchpressed(id, x, y)
     local scale = VAR("scale")
-    if game and game.uiVisible and gameStateManager:hasActiveState(Game) and
-        TouchControls.press(id, x/scale, y/scale, SCREENWIDTH, SCREENHEIGHT, function(command)
-            gameStateManager:event("cmdpressed", {[command] = true})
-        end) then
+    local mode = currentTouchMode()
+    local logicalX, logicalY = x / scale, y / scale
+    local onCommand = function(command, button, phase)
+        handleTouchCommand(command, button, phase, mode)
+    end
+    local handled, button = TouchControls.press(id, logicalX, logicalY, SCREENWIDTH, SCREENHEIGHT, onCommand, mode)
+
+    if handled then
+        if button.command == "left" then
+            markTouchInput("LEFT")
+        end
         touchOwners[id] = "control"
+        return
+    end
+
+    TouchControls.setPointer(logicalX, logicalY)
+    if mode == "game" or mode == "aim" then
+        touchOwners[id] = {kind = "aim", x = x, y = y}
         return
     end
 
@@ -280,30 +355,58 @@ function love.touchreleased(id, x, y)
     touchOwners[id] = nil
 
     if owner == "control" then
-        TouchControls.release(id)
+        TouchControls.release(id, function(command, button, phase)
+            handleTouchCommand(command, button, phase, currentTouchMode())
+        end)
     elseif owner then
-        love.mousereleased(x, y, 1)
+        TouchControls.setPointer(x / VAR("scale"), y / VAR("scale"))
+        if owner.kind == "mouse" then
+            love.mousereleased(x, y, 1)
+        end
     end
 end
 
 function love.touchmoved(id, x, y, dx, dy)
     local owner = touchOwners[id]
-    if owner and owner ~= "control" then
-        owner.x = x
-        owner.y = y
+    if not owner then
+        return
+    end
+
+    local scale = VAR("scale")
+    local logicalX, logicalY = x / scale, y / scale
+    local mode = currentTouchMode()
+    local onCommand = function(command, button, phase)
+        handleTouchCommand(command, button, phase, mode)
+    end
+    local handled = TouchControls.move(id, logicalX, logicalY, SCREENWIDTH, SCREENHEIGHT, onCommand, mode)
+
+    if handled then
+        touchOwners[id] = "control"
+        return
+    end
+
+    if owner == "control" then
+        return
+    end
+
+    TouchControls.setPointer(logicalX, logicalY)
+    owner.x, owner.y = x, y
+    if owner.kind == "mouse" then
         love.mousemoved(x, y, dx, dy)
     end
 end
 
 function love.focus(focused)
     if not focused then
-        TouchControls.reset()
         for id, owner in pairs(touchOwners) do
-            if owner ~= "control" then
+            if owner ~= "control" and owner.kind == "mouse" then
                 love.mousereleased(owner.x, owner.y, 1)
             end
             touchOwners[id] = nil
         end
+        TouchControls.reset(function(command, button, phase)
+            handleTouchCommand(command, button, phase, currentTouchMode())
+        end)
     end
 end
 

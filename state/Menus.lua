@@ -1,4 +1,5 @@
 local Menus = class("Menus")
+local TouchControls = require "lib.TouchControls"
 
 Menus.windowClasses = {
     mappackSelector = require("class.menu.MappackSelector"),
@@ -44,6 +45,8 @@ function Menus:draw()
     love.graphics.push()
     love.graphics.origin()
     self.canvas:rootDraw()
+    love.graphics.scale(VAR("scale"), VAR("scale"))
+    TouchControls.draw(SCREENWIDTH, SCREENHEIGHT, "menu")
     love.graphics.pop()
 
     prof.pop()
@@ -52,6 +55,7 @@ end
 
 
 function Menus:mousepressed(x, y, button)
+    self.canvas:rootmousemoved(x, y)
     if self.canvas:rootmousepressed(x, y, button) then
         return true
     end
