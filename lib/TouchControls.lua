@@ -150,7 +150,7 @@ local function pressButton(id, button, onCommand)
     elseif button.virtual then
         activeCommands[button.command] = (activeCommands[button.command] or 0) + 1
         changeVirtualState(button.command)
-        if button.emitOnPress and not wasDown then
+        if not wasDown then
             emit(onCommand, button, "press")
         end
     elseif button.mouseButton or button.emitOnPress then

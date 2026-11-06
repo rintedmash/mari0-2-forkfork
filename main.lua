@@ -230,14 +230,6 @@ function love.textinput(text)
     gameStateManager:event("textinput", text)
 end
 
-function getWorldMouse()
-    local x, y = TouchControls.getPointer()
-    if x and y then
-        return x, y
-    end
-    return love.mouse.getX()/VAR("scale"), love.mouse.getY()/VAR("scale")
-end
-
 function love.mousepressed(x, y, button, istouch)
     if istouch then
         return
@@ -313,13 +305,15 @@ local function handleTouchCommand(command, button, phase, mode)
         end
     elseif phase == "press" and button.toggle == "run" then
         markTouchInput("RUNLOCK")
-    elseif phase == "press" and button.emitOnPress then
+    elseif phase == "press" and button.virtual then
         if command == "jump" and controls3.cmdDown("jump") then
             markTouchInput("JUMP")
         elseif command ~= "jump" then
             markTouchInput(string.upper(command))
         end
-        gameStateManager:event("cmdpressed", {[command] = true})
+        if button.emitOnPress then
+            gameStateManager:event("cmdpressed", {[command] = true})
+        end
     end
 end
 

@@ -12,14 +12,18 @@ components:
   .wiki.git: assist
   class/Actor.lua: auto
   components/smb3/animation.lua: copilot
-  .github/workflows/build.yml: auto
+  .github/workflows/build.yml: auto  .github/scripts/android-smoke-test.sh: auto
+  .github/android/res/drawable/love.png: auto
+  .github/android/res/values/colors.xml: auto
+  .gitignore: auto
+  makelove.toml: auto
   README.md: auto
   conf.lua: auto
   lib/TouchControls.lua: auto
   lib/controls3.lua: auto
   main.lua: auto
   state/Game.lua: auto
-  test/test_touchcontrols.lua: auto
+  test/test_touchcontrols.lua: auto  test/test_controls3.lua: auto
   test/test_actor_destroy.lua: auto
 ---
 

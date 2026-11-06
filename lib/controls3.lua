@@ -62,15 +62,15 @@ function controls3.getCmdsForKey(key)
     if  key ~= "lshift" and key ~= "rshift" and
         key ~= "lalt" and key ~= "ralt" and
         key ~= "lctrl" and key ~= "rctrl" then
-        if love.keyboard.isDown({"lshift", "rshift"}) then
+        if love.keyboard.isDown("lshift", "rshift") then
             keyModified = "+" .. keyModified
         end
 
-        if love.keyboard.isDown({"lalt", "ralt"}) then
+        if love.keyboard.isDown("lalt", "ralt") then
             keyModified = "!" .. keyModified
         end
 
-        if love.keyboard.isDown({"lctrl", "rctrl"}) then
+        if love.keyboard.isDown("lctrl", "rctrl") then
             keyModified = "^" .. keyModified
         end
     end
@@ -105,7 +105,7 @@ function controls3.cmdDown(cmd)
 
         local firstChar = string.sub(key, 1, 1)
         if firstChar == "^" then
-            if not love.keyboard.isDown({"lctrl", "rctrl"}) then
+            if not love.keyboard.isDown("lctrl", "rctrl") then
                 pass = false
             end
             key = string.sub(key, 2, -1)
@@ -113,7 +113,7 @@ function controls3.cmdDown(cmd)
 
         local firstChar = string.sub(key, 1, 1)
         if firstChar == "!" then
-            if not love.keyboard.isDown({"lalt", "ralt"}) then
+            if not love.keyboard.isDown("lalt", "ralt") then
                 pass = false
             end
             key = string.sub(key, 2, -1)
@@ -121,7 +121,7 @@ function controls3.cmdDown(cmd)
 
         local firstChar = string.sub(key, 1, 1)
         if firstChar == "+" then
-            if not love.keyboard.isDown({"lshift", "rshift"}) then
+            if not love.keyboard.isDown("lshift", "rshift") then
                 pass = false
             end
             key = string.sub(key, 2, -1)

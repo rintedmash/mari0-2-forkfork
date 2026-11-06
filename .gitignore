@@ -11,3 +11,4 @@ wlua55.exe
 luac.out
 luacheck.exe
 stylua.exe
+dist/

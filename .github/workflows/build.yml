@@ -29,7 +29,7 @@ jobs:
           cp environment.example.lua environment.lua
           luajit -e 'local environment = dofile("environment.lua"); assert(type(environment.debug) == "table"); assert(environment.debug.mappack == "world-e"); assert(environment.scale == 3)'
       - name: Run Lua unit tests
-        run: luajit -e 'lunatest = require "test.lunatest"; lunatest.suite("test.test_actor_destroy"); lunatest.suite("test.test_jumping"); lunatest.suite("test.test_touchcontrols"); lunatest.run()'
+        run: luajit -e 'lunatest = require "test.lunatest"; lunatest.suite("test.test_actor_destroy"); lunatest.suite("test.test_controls3"); lunatest.suite("test.test_jumping"); lunatest.suite("test.test_touchcontrols"); lunatest.run()'
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -75,7 +75,6 @@ jobs:
           resource-path: .github/android/res
           icon-specifier: "@drawable/love"
           love-ref: "11.5"
-          love-patch: .github/android/no-microphone.patch
           love-package: dist/mari0-2.love
           product-name: mari0-2
           version-string: "0.1.${{ github.run_number }}"
@@ -126,95 +125,7 @@ jobs:
           arch: x86_64
           profile: pixel_7
           disable-animations: true
-          script: |
-            set -euo pipefail
-            mkdir -p dist/android/smoke
-            adb install -r dist/android/mari0-2-debug.apk
-            adb shell am force-stop com.wokitron.mari02
-            adb logcat -c
-            adb shell am start -n com.wokitron.mari02/org.love2d.android.GameActivity
-            for attempt in $(seq 1 60); do
-              adb logcat -d > dist/android/smoke/wait-log.txt
-              if grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/wait-log.txt; then
-                break
-              fi
-              sleep 1
-            done
-            adb logcat -d > dist/android/smoke/startup-log.txt
-            grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/startup-log.txt
-            sleep 3
-            adb exec-out screencap -p > dist/android/smoke/menu.png
-            adb shell pidof com.wokitron.mari02 | tr -d '\r' | grep -q .
-            read -r start_x start_y left_x left_y jump_x jump_y portal1_x portal1_y portal2_x portal2_y runlock_x runlock_y close_x close_y use_x use_y unit_pixels <<< "$(python - <<'PY'
-            from PIL import Image
-            image = Image.open("dist/android/smoke/menu.png").convert("RGB")
-            pixels = list(image.resize((80, 36)).getdata())
-            assert len(set(pixels)) > 32, "Menu screenshot appears blank"
-            assert sum(max(pixel) > 40 for pixel in pixels) / len(pixels) > 0.08, "Menu screenshot appears blank"
-            source = image.load()
-            left, top = image.width, image.height
-            right = bottom = 0
-            for y in range(0, image.height, 4):
-                for x in range(0, image.width, 4):
-                    if max(source[x, y]) > 40:
-                        left = min(left, x)
-                        top = min(top, y)
-                        right = max(right, x + 1)
-                        bottom = max(bottom, y + 1)
-            viewport_width = right - left
-            viewport_height = bottom - top
-            assert viewport_width * viewport_height > image.width * image.height * 0.25, "Could not locate the LÖVE viewport"
-            unit = min(viewport_width / 400, viewport_height / 224)
-            start_x, start_y = left + round(viewport_width - 26.5 * unit), top + round(13 * unit)
-            left_x, left_y = left + round(26 * unit), top + round(174 * unit)
-            jump_x, jump_y = left + round(viewport_width - 29 * unit), top + round(viewport_height - 40 * unit)
-            portal1_x, portal1_y = left + round(18.5 * unit), top + round(85.5 * unit)
-            portal2_x, portal2_y = left + round(18.5 * unit), top + round(113.5 * unit)
-            runlock_x, runlock_y = left + round(viewport_width - 120.5 * unit), top + round(viewport_height - 17.5 * unit)
-            close_x, close_y = left + round(18.5 * unit), top + round(141.5 * unit)
-            use_x, use_y = left + round(viewport_width - 120.5 * unit), top + round(viewport_height - 42.5 * unit)
-            print(start_x, start_y, left_x, left_y, jump_x, jump_y, portal1_x, portal1_y, portal2_x, portal2_y, runlock_x, runlock_y, close_x, close_y, use_x, use_y, round(unit))
-            PY
-            )"
-            adb shell input tap "$start_x" "$start_y"
-            sleep 5
-            adb logcat -d > dist/android/smoke/gameplay-log.txt
-            grep -Fq MARI0_2_TOUCH_START_OK dist/android/smoke/gameplay-log.txt
-            adb exec-out screencap -p > dist/android/smoke/gameplay.png
-            adb shell input swipe "$left_x" "$left_y" "$((left_x + 10 * unit_pixels))" "$left_y" 1200
-            adb shell input tap "$jump_x" "$jump_y"
-            sleep 2
-            adb shell pidof com.wokitron.mari02 | tr -d '\r' | grep -q .
-            adb shell input tap "$portal1_x" "$portal1_y"
-            adb shell input tap "$portal2_x" "$portal2_y"
-            adb shell input tap "$close_x" "$close_y"
-            adb shell input tap "$use_x" "$use_y"
-            adb shell input tap "$runlock_x" "$runlock_y"
-            sleep 1
-            adb shell pidof com.wokitron.mari02 | tr -d '\r' | grep -q .
-            adb logcat -d > dist/android/smoke/gameplay-input-log.txt
-            grep -Fq MARI0_2_TOUCH_LEFT_OK dist/android/smoke/gameplay-input-log.txt
-            grep -Fq MARI0_2_TOUCH_JUMP_OK dist/android/smoke/gameplay-input-log.txt
-            grep -Fq MARI0_2_TOUCH_PORTAL1_OK dist/android/smoke/gameplay-input-log.txt
-            grep -Fq MARI0_2_TOUCH_PORTAL2_OK dist/android/smoke/gameplay-input-log.txt
-            grep -Fq MARI0_2_TOUCH_CLOSEPORTALS_OK dist/android/smoke/gameplay-input-log.txt
-            grep -Fq MARI0_2_TOUCH_USE_OK dist/android/smoke/gameplay-input-log.txt
-            grep -Fq MARI0_2_TOUCH_RUNLOCK_OK dist/android/smoke/gameplay-input-log.txt
-            if grep -E 'FATAL EXCEPTION|E/AndroidRuntime|UnsatisfiedLinkError|MARI0_2_STARTUP_ERROR' dist/android/smoke/gameplay-input-log.txt; then
-              exit 1
-            fi
-            adb exec-out screencap -p > dist/android/smoke/gameplay-input.png
-            python - <<'PY'
-            from PIL import Image, ImageChops
-            menu = Image.open("dist/android/smoke/menu.png").convert("RGB").resize((80, 36))
-            gameplay = Image.open("dist/android/smoke/gameplay.png").convert("RGB").resize((80, 36))
-            diff = ImageChops.difference(menu, gameplay)
-            changed = sum(max(pixel) > 24 for pixel in diff.getdata()) / (80 * 36)
-            assert changed > 0.02, "Start button did not transition from the menu into gameplay"
-            image = Image.open("dist/android/smoke/gameplay-input.png").convert("RGB").resize((80, 36))
-            pixels = list(image.getdata())
-            assert len(set(pixels)) > 32, "Gameplay screenshot appears blank"
-            PY
+          script: bash .github/scripts/android-smoke-test.sh
       - uses: actions/upload-artifact@v7
         if: always()
         with:
