@@ -10,7 +10,17 @@ local touchInputLogged = {}
 local forceTouchControls = os.getenv("MARI0_FORCE_TOUCH_CONTROLS") == "1"
 local forcedMouseTouch = false
 local forcedMouseTouchId = "mari0-forced-desktop-touch"
+local fitToScreen = false
 local Game, Editor, Menus
+
+local function isHandheldOS()
+    if type(love) ~= "table" or not love.system or not love.system.getOS then
+        return false
+    end
+
+    local osName = love.system.getOS()
+    return osName == "Android" or osName == "iOS"
+end
 
 function love.load(arg)
 	if lovetest.detect(arg) then
@@ -19,13 +29,30 @@ function love.load(arg)
 
     require "util"
 
-    love.window.setMode(400*VAR("scale"), 224*VAR("scale"), {
-        vsync = VAR("vsync"),
-        resizable = true,
-        msaa = VAR("msaa"),
-        minwidth = 243*VAR("scale"),
-        minheight = 165*VAR("scale"),
-    })
+    fitToScreen = isHandheldOS() or os.getenv("MARI0_FORCE_FIT") == "1"
+
+    if fitToScreen then
+        -- Handhelds already run fullscreen: requesting a 400x224 surface gets
+        -- it stretched non-uniformly across the screen and desynchronizes
+        -- touch coordinates. Keep the native surface and scale the logical
+        -- view to fit it instead.
+        if love.graphics.getWidth() == 0 then
+            love.window.setMode(0, 0, {
+                vsync = VAR("vsync"),
+                resizable = true,
+                msaa = VAR("msaa"),
+            })
+        end
+        setVAR("scale", math.min(love.graphics.getWidth()/400, love.graphics.getHeight()/224))
+    else
+        love.window.setMode(400*VAR("scale"), 224*VAR("scale"), {
+            vsync = VAR("vsync"),
+            resizable = true,
+            msaa = VAR("msaa"),
+            minwidth = 243*VAR("scale"),
+            minheight = 165*VAR("scale"),
+        })
+    end
 
     love.graphics.setDefaultFilter("nearest", "nearest")
 
@@ -92,8 +119,24 @@ function love.load(arg)
     local GameStateManager3 = require "lib.GameStateManager3"
     gameStateManager = GameStateManager3:new()
 
-    love.resize(400*VAR("scale"), 224*VAR("scale"))
+    if fitToScreen then
+        love.resize(love.graphics.getWidth(), love.graphics.getHeight())
+    else
+        love.resize(400*VAR("scale"), 224*VAR("scale"))
+    end
     TouchControls.setPointer(SCREENWIDTH / 2, SCREENHEIGHT / 2)
+
+    local desktopWidth, desktopHeight = love.window.getDesktopDimensions()
+    local windowWidth, windowHeight = love.window.getMode()
+    print(string.format(
+        "MARI0_VIDEO os=%s drawable=%dx%d window=%dx%d desktop=%dx%d scale=%.3f logical=%dx%d touchSupported=%s fitToScreen=%s",
+        love.system.getOS(),
+        love.graphics.getWidth(), love.graphics.getHeight(),
+        windowWidth, windowHeight,
+        desktopWidth, desktopHeight,
+        VAR("scale"), SCREENWIDTH, SCREENHEIGHT,
+        tostring(TouchControls.isSupported()), tostring(fitToScreen)
+    ))
 
     -- Alright let's go do the stuff
 	selectedMappackPath = VAR("debug").mappack
@@ -430,6 +473,13 @@ function love.focus(focused)
 end
 
 function love.resize(w, h)
+    if fitToScreen then
+        local fitScale = math.min(w/400, h/224)
+        if fitScale > 0 then
+            setVAR("scale", fitScale)
+        end
+    end
+
     SCREENWIDTH = w/VAR("scale")
     SCREENHEIGHT = h/VAR("scale")
 

@@ -61,8 +61,8 @@ function TouchControls.getButtons(width, height, mode)
         makeButton("closePortals", "R", portalX, 129 * unit, smallSize, smallSize, "circle", {virtual = true, emitOnPress = true, requiresPortalGun = true}),
         makeButton("left", "<", 11 * unit, dpadY, dpadSize, dpadSize, "square", {virtual = true}),
         makeButton("right", ">", 69 * unit, dpadY, dpadSize, dpadSize, "square", {virtual = true}),
-        makeButton("up", "^", 40 * unit, 130 * unit, dpadSize, dpadSize, "square", {virtual = true}),
-        makeButton("down", "v", 40 * unit, 188 * unit, dpadSize, dpadSize, "square", {virtual = true}),
+        makeButton("up", "^", 40 * unit, dpadY - dpadSize, dpadSize, dpadSize, "square", {virtual = true}),
+        makeButton("down", "v", 40 * unit, dpadY + dpadSize, dpadSize, dpadSize, "square", {virtual = true}),
         makeButton("use", "U", width - 133 * unit, runY, smallSize, smallSize, "circle", {virtual = true, emitOnPress = true}),
         makeButton("runlock", "+", width - 133 * unit, height - 30 * unit, smallSize, smallSize, "circle", {toggle = "run"}),
         makeButton("run", "B", runX, runY, actionSize, actionSize, "circle", {virtual = true, emitOnPress = true}),
@@ -249,7 +249,20 @@ function TouchControls.getPointer()
 end
 
 function TouchControls.isSupported()
-    return os.getenv("MARI0_FORCE_TOUCH_CONTROLS") == "1" or (love.touch and love.touch.isSupported and love.touch.isSupported()) or false
+    if os.getenv("MARI0_FORCE_TOUCH_CONTROLS") == "1" then
+        return true
+    end
+
+    -- love.touch.isSupported() can report false on some Android builds even
+    -- though touch input is delivered, so trust the OS on handhelds.
+    if type(love) == "table" and love.system and love.system.getOS then
+        local osName = love.system.getOS()
+        if osName == "Android" or osName == "iOS" then
+            return true
+        end
+    end
+
+    return (love.touch and love.touch.isSupported and love.touch.isSupported()) or false
 end
 
 function TouchControls.draw(width, height, mode)

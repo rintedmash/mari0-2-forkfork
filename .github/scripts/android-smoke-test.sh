@@ -22,6 +22,36 @@ for attempt in {1..60}; do
 done
 adb logcat -d > dist/android/smoke/startup-log.txt
 grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/startup-log.txt
+video_line="$(grep -F 'MARI0_VIDEO' dist/android/smoke/startup-log.txt | tail -n 1)"
+echo "$video_line"
+python - "$video_line" <<'PY'
+import re
+import sys
+
+line = sys.argv[1]
+match = re.search(
+    r"MARI0_VIDEO os=(\S+) drawable=(\d+)x(\d+) window=(\d+)x(\d+) "
+    r"scale=([\d.]+) logical=(\d+)x(\d+) touchSupported=(\w+) fitToScreen=(\w+)",
+    line,
+)
+assert match, f"MARI0_VIDEO diagnostic missing or malformed: {line}"
+os_name, dw, dh, ww, wh, scale, lw, lh, touch_supported, fit = match.groups()
+dw, dh, ww, wh, lw, lh = (int(value) for value in (dw, dh, ww, wh, lw, lh))
+scale = float(scale)
+assert os_name == "Android", f"unexpected OS: {os_name}"
+assert touch_supported == "true", "touch controls are not enabled on Android"
+assert fit == "true", "fit-to-screen scaling is not enabled on Android"
+expected_scale = min(dw / 400, dh / 224)
+assert abs(scale - expected_scale) < 0.01, f"scale {scale} does not fit drawable {dw}x{dh}"
+assert abs(lw - dw / scale) < 1 and abs(lh - dh / scale) < 1, (
+    f"logical size {lw}x{lh} does not match drawable {dw}x{dh} at scale {scale}"
+)
+assert dw == ww and dh == wh, (
+    f"render surface {dw}x{dh} does not match window {ww}x{wh}; "
+    "the surface was resized and will be stretched non-uniformly"
+)
+print(f"MARI0_VIDEO ok: drawable {dw}x{dh}, scale {scale}, logical {lw}x{lh}")
+PY
 sleep 3
 adb exec-out screencap -p > dist/android/smoke/menu.png
 adb shell pidof com.wokitron.mari02 | tr -d '\r' | grep -q .
@@ -53,6 +83,8 @@ portal2_x, portal2_y = left + round(18.5 * unit), top + round(113.5 * unit)
 runlock_x, runlock_y = left + round(viewport_width - 120.5 * unit), top + round(viewport_height - 17.5 * unit)
 close_x, close_y = left + round(18.5 * unit), top + round(141.5 * unit)
 use_x, use_y = left + round(viewport_width - 120.5 * unit), top + round(viewport_height - 42.5 * unit)
+with open("dist/android/smoke/geometry.txt", "w") as handle:
+    handle.write(f"{left} {top} {viewport_width} {viewport_height} {unit}\n")
 print(start_x, start_y, left_x, left_y, jump_x, jump_y, portal1_x, portal1_y, portal2_x, portal2_y, runlock_x, runlock_y, close_x, close_y, use_x, use_y, round(unit))
 PY
 )"
@@ -61,6 +93,39 @@ sleep 5
 adb logcat -d > dist/android/smoke/gameplay-log.txt
 grep -Fq MARI0_2_TOUCH_START_OK dist/android/smoke/gameplay-log.txt
 adb exec-out screencap -p > dist/android/smoke/gameplay.png
+python - <<'PY'
+from PIL import Image
+
+left, top, viewport_width, viewport_height, unit = (
+    float(value) for value in open("dist/android/smoke/geometry.txt").read().split()
+)
+
+image = Image.open("dist/android/smoke/gameplay.png").convert("RGB")
+source = image.load()
+
+def button_visible(center_x, center_y, radius, label="button"):
+    hits = 0
+    x0 = max(0, int(center_x - radius))
+    y0 = max(0, int(center_y - radius))
+    x1 = min(image.width - 1, int(center_x + radius))
+    y1 = min(image.height - 1, int(center_y + radius))
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            if min(source[x, y]) > 185:
+                hits += 1
+                if hits >= 3:
+                    return True
+    return False
+
+checks = (
+    ("up", left + 55 * unit, top + (viewport_height - 79 * unit)),
+    ("jump", left + (viewport_width - 29 * unit), top + (viewport_height - 40 * unit)),
+    ("run", left + (viewport_width - 83 * unit), top + (viewport_height - 40 * unit)),
+)
+for name, center_x, center_y in checks:
+    assert button_visible(center_x, center_y, 15 * unit), f"{name} touch button is not visible on screen"
+print("Touch buttons are visible on screen")
+PY
 adb shell input swipe "$left_x" "$left_y" "$((left_x + 10 * unit_pixels))" "$left_y" 1200
 adb shell input tap "$jump_x" "$jump_y"
 sleep 2

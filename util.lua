@@ -17,6 +17,9 @@ end
 function VAR(i, default)
     return VARIABLES[i] == nil and default or VARIABLES[i]
 end
+function setVAR(i, v)
+    VARIABLES[i] = v
+end
 
 function CHEAT(i)
     return CHEATENABLED[i]
