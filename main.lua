@@ -486,7 +486,9 @@ function love.resize(w, h)
     updateSizes()
 
     print(string.format(
-        "MARI0_VIDEO_SETTLED window=%dx%d scale=%.3f logical=%dx%d touchSupported=%s fitToScreen=%s",
+        "MARI0_VIDEO_SETTLED os=%s drawable=%dx%d window=%dx%d scale=%.3f logical=%dx%d touchSupported=%s fitToScreen=%s",
+        love.system.getOS(),
+        love.graphics.getWidth(), love.graphics.getHeight(),
         w, h, VAR("scale"), SCREENWIDTH, SCREENHEIGHT,
         tostring(TouchControls.isSupported()), tostring(fitToScreen)
     ))
