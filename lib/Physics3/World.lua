@@ -219,6 +219,22 @@ function World:draw()
 		end
     prof.pop()
 
+    prof.push("Behind layers")
+    if self.drawBehindLayers then
+        self:drawBehindLayers()
+    end
+
+    -- Items emerging from a block are drawn behind the tiles, like SMB3
+    love.graphics.setColor(1, 1, 1)
+    for _, obj in ipairs(self.objects) do
+        if obj.emerging then
+            local x, y = obj.x+obj.width/2, obj.y+obj.height/2
+            local flipConstant = (obj.player and 1) or -1
+            drawObject(obj, x, y, obj.angle or 0, (obj.animationDirection or 1)*flipConstant, 1, obj.centerX, obj.centerY)
+            obj:draw()
+        end
+    end
+    prof.pop()
     prof.push("World")
     prof.push("Layers")
     -- Layers
@@ -252,6 +268,9 @@ function World:draw()
     love.graphics.setColor(1, 1, 1)
 
     for _, obj in ipairs(self.objects) do
+        if obj.emerging then
+            -- Already drawn behind the layers
+        else
         local x, y = obj.x+obj.width/2, obj.y+obj.height/2
 
         local quadX = obj.x+obj.width/2-obj.centerX
@@ -345,6 +364,7 @@ function World:draw()
 
         obj:draw()
 	end
+    end
     prof.pop()
 
     prof.push("Portals Front")

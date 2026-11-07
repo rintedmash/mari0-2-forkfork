@@ -44,7 +44,7 @@ function MappackSelector:initialize(parent)
 	self.descriptionBox:addChild(self.descriptionText)
 
 	-- "Add mappack" creation panel (hidden until requested)
-	self.buildCreatePanel()
+	self:buildCreatePanel()
 
 	self.tab = TAB_MAIN
 	self:readMappacks("mappacks/")
@@ -153,7 +153,7 @@ function MappackSelector:update(dt)
 end
 
 function MappackSelector:buildCreatePanel()
-	self.createPanel = Gui3.Box:new(70, 60, 260, 90)
+	self.createPanel = Gui3.Box:new(70, 67, 260, 90)
 	self.createPanel.background = {40/255, 40/255, 40/255}
 	self.createPanel.visible = false
 	self.canvas:addChild(self.createPanel)

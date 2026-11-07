@@ -49,7 +49,12 @@ function Actor:event(eventName, dt, ...)
     end
 
     for _, component in ipairs(self.components) do
-        if component[eventName] then
+        -- While an emerge component is active, it alone handles events
+        -- (draw still runs so the item can be rendered behind the block)
+        local blocked = self.eventBlocker and self.eventBlocker ~= component
+            and eventName ~= "draw"
+
+        if component[eventName] and not blocked then
 
             prof.push(tostring(component.class) .. " " .. eventName)
             component[eventName](component, dt, self.actorEvent[eventName], ...)
@@ -63,7 +68,8 @@ function Actor:event(eventName, dt, ...)
 end
 
 function Actor:update(dt)
-    if self.state then
+    -- State machines stay frozen while an emerge component holds the actor
+    if self.state and not self.eventBlocker then
         self.state:update(dt, self)
     end
 

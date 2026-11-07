@@ -3,6 +3,14 @@ local Level = class("Level", Physics3.World)
 local BlockBounce = require("class.BlockBounce")
 local Viewport = require("class.Viewport")
 local GoalCards = require("lib.goalcards")
+-- The roulette and status-bar panel use the actual powerup sprites as the
+-- card faces (mushroom / fire flower / star), like the SMB3 goal panel
+local goalCardImages = {
+	love.graphics.newImage("img/actors/mushroom.png"),
+	love.graphics.newImage("img/actors/fire_flower.png"),
+	love.graphics.newImage("img/actors/starman.png"),
+}
+local goalCardQuad = love.graphics.newQuad(0, 0, 16, 16, 16, 16)
 
 function Level:initialize(path, players)
     self.players = players or (game and game.players) or {}
@@ -71,6 +79,9 @@ function Level:setupGoalSequence()
                     local mx, my = self:coordinateToWorld(entity.x, entity.y)
                     local card = Actor:new(self, mx, my - 32, cardTemplate)
                     table.insert(self.actors, card)
+                    card.img = goalCardImages[1]
+                    card.quad = goalCardQuad
+                    card.quad = goalCardQuad
                     self.goalSequence = {
                         state = "roulette",
                         card = card,
@@ -351,7 +362,8 @@ function Level:updateGoalSequence(dt)
         while seq.spinTimer >= seq.spinSpeed do
             seq.spinTimer = seq.spinTimer - seq.spinSpeed
             seq.face = GoalCards.nextFace(seq.face)
-            card.quad = card.quads[seq.face]
+            card.img = goalCardImages[seq.face]
+            card.quad = goalCardQuad
         end
     elseif seq.state == "collected" then
         -- "COURSE CLEAR!" -> "YOU GOT A CARD" -> lives banner -> exit
@@ -524,8 +536,8 @@ function Level:bumpBlock(cell, actor, dontBreak)
 				-- bouncing, like in SMB3 (until then it stays hidden inside)
 				table.insert(self.pendingSprouts, {
 					timer = VAR("blockBounceTime"),
-					x = cell.x*16-8,
-					y = (cell.y+1)*16,
+					x = cell.x*16+8,
+					y = cell.y*16+16,
 					rise = 16,
 					template = item,
 				})
@@ -580,8 +592,8 @@ function Level:bounceOnBlock(cell, actor)
 			-- Noteblocks push the item out below, once the bounce is done
 			table.insert(self.pendingSprouts, {
 				timer = VAR("blockBounceTime"),
-				x = cell.x*16-8,
-				y = (cell.y+2)*16,
+				x = cell.x*16+8,
+				y = (cell.y+1)*16,
 				rise = -16,
 				template = item,
 			})

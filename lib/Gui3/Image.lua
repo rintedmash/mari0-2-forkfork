@@ -38,3 +38,9 @@ function Gui3.Image:setQuad(quad)
         self:updateRender()
     end
 end
+function Gui3.Image:setImage(img)
+    if self.img ~= img then
+        self.img = img
+        self:updateRender()
+    end
+end

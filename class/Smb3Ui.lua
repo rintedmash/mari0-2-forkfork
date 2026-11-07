@@ -7,11 +7,12 @@ local uiHeight = 38
 local uiLineHeight = 1
 
 Smb3Ui.height = uiHeight + 1
-local cardImg = love.graphics.newImage("img/goal/cards.png")
-local cardQuads = {}
-for i = 1, 3 do
-	cardQuads[i] = love.graphics.newQuad((i-1)*16, 0, 16, 16, cardImg:getWidth(), cardImg:getHeight())
-end
+-- Card faces are the actual powerup sprites (mushroom / fire flower / star)
+local cardImages = {
+	love.graphics.newImage("img/actors/mushroom.png"),
+	love.graphics.newImage("img/actors/fire_flower.png"),
+	love.graphics.newImage("img/actors/starman.png"),
+}
 
 local pMeterQuad = {
     love.graphics.newQuad(0, 0, 16, 8, 32, 8),
@@ -48,7 +49,7 @@ function Smb3Ui:initialize()
         self.cardBoxes[i].background = self.skyColor
         self.canvas:addChild(self.cardBoxes[i])
 
-        self.cardImgs[i] = Gui3.Image:new("img/goal/cards.png", 3, 5, cardQuads[i])
+        self.cardImgs[i] = Gui3.Image:new(cardImages[i], 3, 5)
         self.cardImgs[i].visible = false
         self.cardBoxes[i]:addChild(self.cardImgs[i])
     end
@@ -117,7 +118,8 @@ function Smb3Ui:update(dt)
             local cardType = panel.cards[i]
             self.cardImgs[i].visible = cardType ~= nil
             if cardType then
-                self.cardImgs[i]:setQuad(cardQuads[GoalCards.typeIndex(cardType)])
+                local typeIndex = GoalCards.typeIndex(cardType)
+                self.cardImgs[i]:setImage(cardImages[typeIndex])
             end
         end
     end

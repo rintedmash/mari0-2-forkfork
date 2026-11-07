@@ -2,7 +2,9 @@ return {
 	width = 16,
 	height = 16,
 
-	img = "img/goal/cards.png",
+	-- The template image is only a placeholder; the Level swaps in the real
+	-- powerup sprites per face
+	img = "img/actors/mushroom.png",
 	quadWidth = 16,
 	quadHeight = 16,
 	centerX = 8,
