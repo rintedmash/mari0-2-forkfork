@@ -11,6 +11,9 @@ local goalCardImages = {
 	love.graphics.newImage("img/actors/starman.png"),
 }
 local goalCardQuad = love.graphics.newQuad(0, 0, 16, 16, 16, 16)
+-- Constant exit-run speed after grabbing the goal card (SMB3 walks off
+-- at walk speed while the legs animate faster)
+local GOAL_RUNSPEED = 90
 
 function Level:initialize(path, players)
     self.players = players or (game and game.players) or {}
@@ -20,15 +23,15 @@ function Level:initialize(path, players)
     local data = sandbox.run(mapCode)
 	self.currentLevel = data
 
+    -- Init before loadLevel: the initial spawn pass may attach the goal
+    -- sequence and queue sprouts while the level loads
+    self.pendingSprouts = {}
+    self.pendingGoalSequence = nil
+    self.goalSequence = nil
+
     self:loadLevel(data)
 
     self.timeLeft = 400
-
-    -- Items that sprout out of blocks after the block finishes bouncing
-    self.pendingSprouts = {}
-
-    -- SMB3 goal card sequence (nil unless this level has a goal card)
-    self.goalSequence = nil
 
     -- SMB3-style level entry: the level fades in from black while the
     -- player stands still (Palette_PrepareFadeIn / Palette_DoFadeIn, 4
@@ -54,52 +57,48 @@ function Level:mappackFeatureSetup()
         controls3.locked = true
     end
 
-    -- Goal card sequence: card bounces around the goal marker
-    if settings.goalCards then
-        self:setupGoalSequence()
-    end
 end
 
-function Level:setupGoalSequence()
-    -- Scan the raw level entities: goal markers beyond the spawn line are not
-    -- actors yet at load time. The first goal_block anchors the sequence.
-    for _, entity in ipairs(self.currentLevel.entities or {}) do
-        if entity.type == "goal_block" then
-            local entityComponents = entity.components or {}
-            local warpArgs = entityComponents["actReact.tag.warp"]
+function Level:mergeGoalCardEntities()
+	-- The goal_block marker (the "level clear" object) IS the item roulette:
+	-- retyping the first marker entity into a goal_card makes the normal
+	-- spawn pipeline place the card right where the block was, so there is
+	-- a single object instead of a decoration block plus a floating card.
+	for _, entity in ipairs(self.currentLevel.entities or {}) do
+		if entity.type == "goal_block" then
+			local entityComponents = entity.components or {}
+			local warpArgs = entityComponents["actReact.tag.warp"]
 
-            -- The marker block is just decoration now; the card is the exit
-            entityComponents["actReact.tag.warp"] = nil
-            entity.components = entityComponents
+			-- The card is the exit now; drop the old warp behaviour
+			entityComponents["actReact.tag.warp"] = nil
+			entity.components = entityComponents
 
-            if not self.goalSequence then
-                local cardTemplate = actorTemplates["goal_card"]
-                if cardTemplate then
-                    -- Entity coordinates are tile-based; convert to world pixels
-                    local mx, my = self:coordinateToWorld(entity.x, entity.y)
-                    local card = Actor:new(self, mx, my - 32, cardTemplate)
-                    table.insert(self.actors, card)
-                    card.img = goalCardImages[1]
-                    card.quad = goalCardQuad
-                    card.quad = goalCardQuad
-                    self.goalSequence = {
-                        state = "roulette",
-                        card = card,
-                        minX = mx - 24,
-                        maxX = mx + 24,
-                        spinTimer = 0,
-                        spinSpeed = 0.08,
-                        speed = 86,
-                        face = 1,
-                        direction = 1,
-                        exit = warpArgs or nil,
-                        timer = 0,
-                    }
-                    card.goalSequence = self.goalSequence
-                end
-            end
-        end
-    end
+			if not self.pendingGoalSequence then
+				entity.type = "goal_card"
+				self.pendingGoalSequence = {exit = warpArgs or nil}
+			end
+		end
+	end
+end
+
+-- Called from spawnActors when the merged goal_card actor appears
+function Level:attachGoalSequence(card)
+	self.goalSequence = {
+		state = "roulette",
+		card = card,
+		minX = card.x - 24,
+		maxX = card.x + 24,
+		spinTimer = 0,
+		spinSpeed = 0.08,
+		speed = 86,
+		face = 1,
+		direction = 1,
+		exit = self.pendingGoalSequence and self.pendingGoalSequence.exit or nil,
+		timer = 0,
+	}
+	card.img = goalCardImages[1]
+	card.quad = goalCardQuad
+	card.goalSequence = self.goalSequence
 end
 
 function Level:loadLevel(data)
@@ -133,6 +132,12 @@ function Level:loadLevel(data)
     self.spawnList = {}
 	self.exitList = {}
 	self.entitiesInBlocks = {}
+
+    -- The goal marker becomes the card itself: retype goal_block entities
+    -- into goal_card before the spawn list is built, so the bouncing
+    -- roulette IS the level-clear object (SMB3's EndLevelCard)
+    self:mergeGoalCardEntities()
+
     -- Parse entities
     for _, entity in ipairs(self.data.entities) do
         local actorTemplate = actorTemplates[entity.type]
@@ -308,10 +313,13 @@ function Level:collectGoalCard()
     if not seq or seq.state ~= "roulette" then
         return
     end
-
     seq.state = "collected"
     seq.timer = 0
     seq.stoppedFace = seq.face
+
+    -- The card freezes in place (it was bouncing on a real velocity)
+    seq.card.speed[1] = 0
+    seq.card.speed[2] = 0
 
     -- Add the stopped card to the status-bar panel, like Player_GetCard
     game.cardPanel = game.cardPanel or GoalCards.newPanel()
@@ -321,7 +329,7 @@ function Level:collectGoalCard()
     self.timeBonusScore = math.floor(self.timeLeft) * 50
     self.timeLeft = 0
 
-    playSound("fortress_clear")
+    playSound("level_clear")
     playMusic(nil)
 
     for _, viewport in ipairs(self.viewports) do
@@ -333,7 +341,16 @@ function Level:collectGoalCard()
 
     self.players[1].score = self.players[1].score + self.timeBonusScore
 
-    seq.bannerText = "COURSE CLEAR!"
+    -- SMB3: Mario's velocity cancels out on the spot; he falls onto the
+    -- floor and then runs off to the right (handled in the update below)
+    local player = self.players[1].actor
+    if player then
+        player.speed[1] = 0
+        player.speed[2] = 0
+        player.runAnimationBoost = 2
+    end
+
+    seq.courseClearShown = true
     seq.bannerTime = 0
 end
 
@@ -346,9 +363,11 @@ function Level:updateGoalSequence(dt)
     seq.timer = seq.timer + dt
 
     if seq.state == "roulette" then
-        -- Bounce the card between its bounds
+        -- Bounce the card between its bounds. Move it through speed[] (not
+        -- direct x mutation) so the physics sweep generates contact events
+        -- when the bouncing card reaches a standing player, like the original
         local card = seq.card
-        card.x = card.x + seq.direction*seq.speed*dt
+        card.speed[1] = seq.direction*seq.speed
         if card.x < seq.minX then
             card.x = seq.minX
             seq.direction = 1
@@ -366,14 +385,22 @@ function Level:updateGoalSequence(dt)
             card.quad = goalCardQuad
         end
     elseif seq.state == "collected" then
-        -- "COURSE CLEAR!" -> "YOU GOT A CARD" -> lives banner -> exit
+        -- Run off to the right at a constant speed (the faster feet are the
+        -- runAnimationBoost set on collect, like SMB3's exit walk)
+        local player = self.players[1].actor
+        if player then
+            if player.onGround then
+                player.speed[1] = GOAL_RUNSPEED
+            else
+                player.speed[1] = 0
+            end
+        end
+
+        -- "COURSE CLEAR !" shows first; "YOU GOT A CARD" appears later
         seq.bannerTime = seq.bannerTime + dt
 
         if seq.bannerTime >= 2.2 and not seq.gotCardShown then
             seq.gotCardShown = true
-            seq.bannerText = "YOU GOT A CARD"
-            seq.bannerTime = 0
-            playSound("correct")
         elseif seq.gotCardShown and seq.bannerTime >= 2 and not seq.award then
             seq.award = GoalCards.evaluate(game.cardPanel)
             seq.bannerTime = 0
@@ -445,14 +472,38 @@ function Level:draw()
         love.graphics.setColor(1, 1, 1)
     end
 
-    -- Goal sequence banners ("COURSE CLEAR!" / "YOU GOT A CARD" / "N LIVES!")
-    if self.goalSequence and self.goalSequence.bannerText then
+    -- Goal sequence banners: "COURSE CLEAR !" up top first, "YOU GOT A CARD"
+    -- (with the won card in its box) underneath when it appears, like the
+    -- SMB3 course clear screen
+    if self.goalSequence and self.goalSequence.courseClearShown then
+        local seq = self.goalSequence
+
         love.graphics.setFont(fontOutlined)
         love.graphics.setColor(1, 1, 1)
-        love.graphics.print(self.goalSequence.bannerText,
-            math.floor((SCREENWIDTH - love.graphics.getFont():getWidth(self.goalSequence.bannerText)*2)/2),
-            56, 0, 2, 2)
+
+        self:printCenteredBanner("COURSE CLEAR !", 32)
+
+        if seq.gotCardShown then
+            local text = seq.award and seq.award > 0
+                and (seq.award == 1 and "YOU GOT 1 LIFE!" or ("YOU GOT " .. seq.award .. " LIVES!"))
+                or "YOU GOT A CARD"
+            local tx = self:printCenteredBanner(text, 56)
+
+            if not seq.award or seq.award == 0 then
+                -- The won card in its box, like the SMB3 card display
+                local cardImg = goalCardImages[seq.stoppedFace or 1]
+                local bx = math.floor((SCREENWIDTH + fontOutlined:getWidth(text))/2) + 8
+                love.graphics.rectangle("fill", bx, 52, 20, 20)
+                love.graphics.draw(cardImg, goalCardQuad, bx+2, 54)
+            end
+        end
     end
+end
+
+function Level:printCenteredBanner(text, y)
+    local x = math.floor((SCREENWIDTH - fontOutlined:getWidth(text))/2)
+    love.graphics.print(text, x, y)
+    return x + fontOutlined:getWidth(text)
 end
 
 function Level:drawBehindObjects()
@@ -499,6 +550,12 @@ function Level:spawnActors(untilX)
 
         table.insert(self.actors, actor)
 
+        -- The merged goal card carries the whole clear sequence
+        if toSpawn.actorTemplate == actorTemplates["goal_card"]
+            and not self.goalSequence and self.pendingGoalSequence then
+            self:attachGoalSequence(actor)
+        end
+
         self.spawnI = self.spawnI + 1
 
         -- Update untilX so enemies spawn in groups
@@ -537,7 +594,7 @@ function Level:bumpBlock(cell, actor, dontBreak)
 				table.insert(self.pendingSprouts, {
 					timer = VAR("blockBounceTime"),
 					x = cell.x*16+8,
-					y = cell.y*16+16,
+					y = cell.y*16 + 16,
 					rise = 16,
 					template = item,
 				})
@@ -593,7 +650,7 @@ function Level:bounceOnBlock(cell, actor)
 			table.insert(self.pendingSprouts, {
 				timer = VAR("blockBounceTime"),
 				x = cell.x*16+8,
-				y = (cell.y+1)*16,
+				y = cell.y*16 + 16,
 				rise = -16,
 				template = item,
 			})

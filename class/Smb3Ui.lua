@@ -102,6 +102,10 @@ function Smb3Ui:resize()
 end
 
 function Smb3Ui:update(dt)
+    if not Smb3Ui.__ranDiag and game and game.cardPanel then
+        Smb3Ui.__ranDiag = true
+        print("MARI0_UI_SEES_PANEL cards=" .. #game.cardPanel.cards)
+    end
     if self.pMeter == VAR("pMeterTicks") then
         self.pMeterBlinkTimer = self.pMeterBlinkTimer + dt
 
@@ -111,15 +115,29 @@ function Smb3Ui:update(dt)
         end
     end
 
-    -- Sync the SMB3 goal-card panel
+    -- Sync the SMB3 goal-card panel (visibility flips must mark the
+    -- cached render dirty, or the box canvas stays stale)
     local panel = game and game.cardPanel
     if panel then
         for i = 1, 3 do
             local cardType = panel.cards[i]
-            self.cardImgs[i].visible = cardType ~= nil
+            local visible = cardType ~= nil
+            if self.cardImgs[i].visible ~= visible then
+                self.cardImgs[i].visible = visible
+                self.cardImgs[i]:updateRender()
+            end
             if cardType then
                 local typeIndex = GoalCards.typeIndex(cardType)
                 self.cardImgs[i]:setImage(cardImages[typeIndex])
+                if not self.__panelDebug then
+                    self.__panelDebug = true
+                    print("MARI0_PANEL_DEBUG slot=" .. i .. " type=" .. tostring(cardType)
+                        .. " idx=" .. tostring(typeIndex)
+                        .. " img=" .. tostring(cardImages[typeIndex])
+                        .. " visible=" .. tostring(self.cardImgs[i].visible)
+                        .. " parentVisible=" .. tostring(self.cardBoxes[i] and self.cardBoxes[i].visible)
+                        .. " w=" .. tostring(self.cardImgs[i].w) .. " h=" .. tostring(self.cardImgs[i].h))
+                end
             end
         end
     end

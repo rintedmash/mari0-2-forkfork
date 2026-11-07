@@ -7,7 +7,7 @@ require "loop"
 local TouchControls = require "lib.TouchControls"
 local touchOwners = {}
 local touchInputLogged = {}
-local forceTouchControls = os.getenv("MARI0_FORCE_TOUCH_CONTROLS") == "1"local smokeEntry = os.getenv("MARI0_SMOKE_ENTRY") == "1"
+local forceTouchControls = os.getenv("MARI0_FORCE_TOUCH_CONTROLS") == "1"
 local forcedMouseTouch = false
 local forcedMouseTouchId = "mari0-forced-desktop-touch"
 local fitToScreen = false
@@ -218,61 +218,7 @@ function love.update(dt)
 
     gameStateManager:event("update", dt)
 
-    -- Entry-fade smoke test: verify the SMB3-style fade-in freezes and
-    -- releases input (MARI0_SMOKE_GOAL=1 additionally teleports the player
-    -- onto the goal card once the fade completes)
-    if smokeEntry and game and game.level then
-        local level = game.level
-        if not level.__smokeFadeStarted and level.entryFade then
-            level.__smokeFadeStarted = true
-            print(string.format("MARI0_ENTRY_FADE_START locked=%s level=%d",
-                tostring(controls3.locked), level.entryFade.level))
-            if io.stdout then io.stdout:flush() end
-        end
-        if level.__smokeFadeStarted and not level.entryFade then
-            print(string.format("MARI0_ENTRY_FADE_DONE locked=%s", tostring(controls3.locked)))
-            if io.stdout then io.stdout:flush() end
-            if os.getenv("MARI0_SMOKE_GOAL") == "1" then
-                -- Report goal sequence state transitions
-                local seq = level.goalSequence
-                if seq and seq.state ~= level.__smokeGoalState then
-                    level.__smokeGoalState = seq.state
-                    print("MARI0_GOAL_STATE " .. seq.state
-                        .. (seq.bannerText and (" banner=" .. seq.bannerText) or ""))
-                    if io.stdout then io.stdout:flush() end
-                end
 
-                -- One-shot teleport onto the goal card
-                if not level.__smokeTeleported then
-                    for _, actor in ipairs(level.actors) do
-                        if actor.actorTemplate and actor.actorTemplate.name == "goal_card" then
-                            local mario = level.players[1].actor
-                            mario.x, mario.y = actor.x, actor.y
-                            level.__smokeTeleported = true
-                            print("MARI0_GOAL_TELEPORT")
-                            break
-                        end
-                    end
-                elseif not seq and level.__smokeGoalState then
-                    -- Sequence finished: report the panel and exit cleanly
-                    local cards = {}
-                    if game.cardPanel then
-                        for i = 1, 3 do
-                            if game.cardPanel.cards[i] then
-                                table.insert(cards, game.cardPanel.cards[i])
-                            end
-                        end
-                    end
-                    print("MARI0_GOAL_COMPLETE panel=" .. table.concat(cards, ",")
-                        .. " lives=" .. level.players[1].lives)
-                    if io.stdout then io.stdout:flush() end
-                    os.exit(0)
-                end
-            else
-                os.exit(0)
-            end
-        end
-    end
 end
 
 local function setColorBasedOn(key)

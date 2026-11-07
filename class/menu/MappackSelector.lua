@@ -40,7 +40,7 @@ function MappackSelector:initialize(parent)
 
 	self.descriptionName = Gui3.Text:new("", 6, 6)
 	self.descriptionBox:addChild(self.descriptionName)
-	self.descriptionText = Gui3.Text:new("", 6, 18)
+	self.descriptionText = Gui3.Text:new("", 6, 18, 136)
 	self.descriptionBox:addChild(self.descriptionText)
 
 	-- "Add mappack" creation panel (hidden until requested)

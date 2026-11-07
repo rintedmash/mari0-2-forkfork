@@ -21,6 +21,7 @@ end
 
 function goalcard:resolve(obj2)
 	if obj2.player then
+		if io.stdout then io.stdout:flush() end
 		self.actor.world:collectGoalCard()
 	end
 end

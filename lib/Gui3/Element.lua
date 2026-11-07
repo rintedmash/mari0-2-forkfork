@@ -75,6 +75,7 @@ function Gui3.Element:removeChild(element)
             table.remove(self.children, i)
 
             self:mouseRegionChanged()
+            self:updateRender()
         end
     end
 end
@@ -85,6 +86,8 @@ function Gui3.Element:clearChildren()
     end
 
     iClearTable(self.children)
+
+    self:updateRender()
 end
 
 function Gui3.Element:deleted()
@@ -593,12 +596,10 @@ function Gui3.Element:getRoot()
 end
 
 function Gui3.Element:updateRender()
-    if not self.needReRender then
-        self.needsReRender = true
+    self.needsReRender = true
 
-        if self.parent then
-            self.parent:updateRender()
-        end
+    if self.parent then
+        self.parent:updateRender()
     end
 end
 

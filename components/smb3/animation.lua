@@ -8,6 +8,11 @@ animation.argList = {
 local MAXSPEEDS = {90, 150, 210}
 
 local FLYANIMATIONTIME = 4/60
+-- SMB3 goal-card exit: Mario's feet animate at double rate while he runs
+-- off at a constant speed (Level:collectGoalCard sets runAnimationBoost)
+local RUNANIMATIONSPEED = {90, 150, 210}
+
+
 local SPINFRAMETIME = 4/60
 local SOMERSAULTTIME = 2/60
 local SHOOTTIME = 12/60
@@ -245,7 +250,7 @@ function animation:postUpdate(dt)
     if (self.actor.animationState == "run" or self.actor.animationState == "sprint") then
         local animationSpeed = (7-math.min(math.floor(math.abs(self.actor.speed[1])/60*16/8), 6))/60 -- frametime is between 1 and 7 frames
 
-        self.actor.runAnimationTimer = self.actor.runAnimationTimer + dt
+        self.actor.runAnimationTimer = self.actor.runAnimationTimer + dt*(self.actor.runAnimationBoost or 1)
 
         while self.actor.runAnimationTimer > animationSpeed do
             self.actor.runAnimationTimer = self.actor.runAnimationTimer - animationSpeed

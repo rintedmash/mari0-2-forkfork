@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      release_apk:
+        description: "Also build signed Release APKs"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -67,7 +72,27 @@ jobs:
         with:
           name: mari0-2-love
           path: dist
-      - name: Build Android debug APK with embedded game
+      - name: Prepare release signing key
+        if: inputs.release_apk
+        id: relkey
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > release.keystore
+          else
+            keytool -genkeypair -v -keystore release.keystore -alias mari0-2 \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "${KS_PASS:-mari0-release-key}" \
+              -keypass "${KS_PASS:-mari0-release-key}" \
+              -dname "CN=Mari0 2, OU=Game, O=Wokitron, C=US"
+          fi
+          echo "alias=${KS_ALIAS:-mari0-2}" >> "$GITHUB_OUTPUT"
+          echo "pass=${KS_PASS:-mari0-release-key}" >> "$GITHUB_OUTPUT"
+          echo "b64=$(base64 -w0 release.keystore)" >> "$GITHUB_OUTPUT"
+      - name: Build Android APKs with embedded game
         uses: love-actions/love-actions-android@eb670108676c0d37d88e3f67d8e22959bc6ba856
         with:
           app-name: Mari0 2
@@ -80,21 +105,36 @@ jobs:
           version-string: "0.1.${{ github.run_number }}"
           version-code: "${{ github.run_number }}"
           output-folder: dist/android
-      - name: Verify the APK contains the game, not just the runtime
+          keystore-base64: ${{ steps.relkey.outputs.b64 }}
+          keystore-alias: ${{ steps.relkey.outputs.alias }}
+          keystore-key-password: ${{ steps.relkey.outputs.pass }}
+          keystore-store-password: ${{ steps.relkey.outputs.pass }}
+      - name: Verify the APKs contain the game, not just the runtime
         run: |
           python3 - <<'PY'
+          import glob
           import zipfile
 
-          path = "dist/android/mari0-2-debug.apk"
-          with zipfile.ZipFile(path) as apk:
-              files = set(apk.namelist())
-              required = {"assets/main.lua", "assets/conf.lua", "assets/environment.lua", "assets/lib/paletteShader.glsl"}
-              missing = required - files
-              if missing:
-                  raise SystemExit(f"The APK is missing embedded game files: {sorted(missing)}")
+          apks = sorted(glob.glob("dist/android/*.apk"))
+          if not apks:
+              raise SystemExit("No APK was produced")
+          required = {"assets/main.lua", "assets/conf.lua", "assets/environment.lua", "assets/lib/paletteShader.glsl"}
+          for path in apks:
+              with zipfile.ZipFile(path) as apk:
+                  missing = required - set(apk.namelist())
+                  if missing:
+                      raise SystemExit(f"{path} is missing embedded game files: {sorted(missing)}")
+              print(f"OK {path}")
           PY
       - uses: actions/upload-artifact@v7
         with:
           name: mari0-2-android-debug
           path: dist/android/mari0-2-debug.apk
+          if-no-files-found: error
+      - name: Upload release APK
+        if: inputs.release_apk
+        uses: actions/upload-artifact@v7
+        with:
+          name: mari0-2-android-release
+          path: dist/android/mari0-2-release*.apk
           if-no-files-found: error

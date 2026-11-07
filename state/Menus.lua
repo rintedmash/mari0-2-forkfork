@@ -13,7 +13,8 @@ end
 
 function Menus:changeWindow(oldWindow, windowClass)
 	table.remove(self.windows, 1)
-	self.canvas:removeChild(oldWindow)
+	-- The window object wraps a Gui3.Canvas; remove that, not the wrapper
+	self.canvas:removeChild(oldWindow.canvas)
 	self:newWindow(self.windowClasses[windowClass])
 end
 
