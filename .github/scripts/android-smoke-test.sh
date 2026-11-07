@@ -15,7 +15,7 @@ for attempt in {1..60}; do
     cat dist/android/smoke/wait-log.txt
     exit 1
   fi
-  last_video="$(grep -F 'MARI0_VIDEO_SETTLED' dist/android/smoke/wait-log.txt | tail -n 1)"
+  last_video="$(grep -F 'MARI0_VIDEO_SETTLED' dist/android/smoke/wait-log.txt | tail -n 1 || true)"
   if grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/wait-log.txt \
      && [[ $last_video =~ window=([0-9]+)x([0-9]+) ]] \
      && (( BASH_REMATCH[1] > BASH_REMATCH[2] )); then
