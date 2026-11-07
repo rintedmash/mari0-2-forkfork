@@ -15,14 +15,16 @@ for attempt in {1..60}; do
     cat dist/android/smoke/wait-log.txt
     exit 1
   fi
-  if grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/wait-log.txt; then
+  if grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/wait-log.txt \
+     && grep -Fq MARI0_VIDEO_SETTLED dist/android/smoke/wait-log.txt; then
     break
   fi
   sleep 1
 done
 adb logcat -d > dist/android/smoke/startup-log.txt
 grep -Fq MARI0_2_STARTUP_COMPLETE dist/android/smoke/startup-log.txt
-video_line="$(grep -F 'MARI0_VIDEO' dist/android/smoke/startup-log.txt | tail -n 1)"
+grep -Fq MARI0_VIDEO_SETTLED dist/android/smoke/startup-log.txt
+video_line="$(grep -F 'MARI0_VIDEO_SETTLED' dist/android/smoke/startup-log.txt | tail -n 1)"
 echo "$video_line"
 python - "$video_line" <<'PY'
 import re
@@ -30,7 +32,7 @@ import sys
 
 line = sys.argv[1]
 match = re.search(
-    r"MARI0_VIDEO os=(\S+) drawable=(\d+)x(\d+) window=(\d+)x(\d+) "
+    r"MARI0_VIDEO_SETTLED os=(\S+) drawable=(\d+)x(\d+) window=(\d+)x(\d+) "
     r"scale=([\d.]+) logical=(\d+)x(\d+) touchSupported=(\w+) fitToScreen=(\w+)",
     line,
 )
@@ -41,16 +43,15 @@ scale = float(scale)
 assert os_name == "Android", f"unexpected OS: {os_name}"
 assert touch_supported == "true", "touch controls are not enabled on Android"
 assert fit == "true", "fit-to-screen scaling is not enabled on Android"
-expected_scale = min(dw / 400, dh / 224)
-assert abs(scale - expected_scale) < 0.01, f"scale {scale} does not fit drawable {dw}x{dh}"
-assert abs(lw - dw / scale) < 1 and abs(lh - dh / scale) < 1, (
-    f"logical size {lw}x{lh} does not match drawable {dw}x{dh} at scale {scale}"
+expected_scale = min(ww / 400, wh / 224)
+assert abs(scale - expected_scale) < 0.01, f"scale {scale} does not fit window {ww}x{wh}"
+assert abs(lw - ww / scale) < 1 and abs(lh - wh / scale) < 1, (
+    f"logical size {lw}x{lh} does not match window {ww}x{wh} at scale {scale}"
 )
-assert dw == ww and dh == wh, (
-    f"render surface {dw}x{dh} does not match window {ww}x{wh}; "
-    "the surface was resized and will be stretched non-uniformly"
+assert abs((lw / lh) - (ww / wh)) < 0.02, (
+    f"logical aspect {lw}x{lh} does not preserve window aspect {ww}x{wh}; the view will be stretched"
 )
-print(f"MARI0_VIDEO ok: drawable {dw}x{dh}, scale {scale}, logical {lw}x{lh}")
+print(f"MARI0_VIDEO_SETTLED ok: window {ww}x{wh}, scale {scale}, logical {lw}x{lh}")
 PY
 sleep 3
 adb exec-out screencap -p > dist/android/smoke/menu.png

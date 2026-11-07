@@ -485,6 +485,12 @@ function love.resize(w, h)
 
     updateSizes()
 
+    print(string.format(
+        "MARI0_VIDEO_SETTLED window=%dx%d scale=%.3f logical=%dx%d touchSupported=%s fitToScreen=%s",
+        w, h, VAR("scale"), SCREENWIDTH, SCREENHEIGHT,
+        tostring(TouchControls.isSupported()), tostring(fitToScreen)
+    ))
+
     gameStateManager:event("resize", SCREENWIDTH, SCREENHEIGHT)
 end
 
