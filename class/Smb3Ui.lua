@@ -7,6 +7,11 @@ local uiHeight = 38
 local uiLineHeight = 1
 
 Smb3Ui.height = uiHeight + 1
+local cardImg = love.graphics.newImage("img/goal/cards.png")
+local cardQuads = {}
+for i = 1, 3 do
+	cardQuads[i] = love.graphics.newQuad((i-1)*16, 0, 16, 16, cardImg:getWidth(), cardImg:getHeight())
+end
 
 local pMeterQuad = {
     love.graphics.newQuad(0, 0, 16, 8, 32, 8),
@@ -14,6 +19,7 @@ local pMeterQuad = {
 }
 
 local lifeQuad = love.graphics.newQuad(0, 0, 16, 8, 16, 72)
+local GoalCards = require "lib.goalcards"
 
 function Smb3Ui:initialize()
     self.pMeter = 0
@@ -36,10 +42,15 @@ function Smb3Ui:initialize()
     self.canvas:addChild(self.uiBox)
 
     self.cardBoxes = {}
+    self.cardImgs = {}
     for i = 1, 3 do
         self.cardBoxes[i] = Gui3.Box:new(150+i*28, 3, 22, 26)
         self.cardBoxes[i].background = self.skyColor
         self.canvas:addChild(self.cardBoxes[i])
+
+        self.cardImgs[i] = Gui3.Image:new("img/goal/cards.png", 3, 5, cardQuads[i])
+        self.cardImgs[i].visible = false
+        self.cardBoxes[i]:addChild(self.cardImgs[i])
     end
 
     self.element = {}
@@ -99,6 +110,18 @@ function Smb3Ui:update(dt)
         end
     end
 
+    -- Sync the SMB3 goal-card panel
+    local panel = game and game.cardPanel
+    if panel then
+        for i = 1, 3 do
+            local cardType = panel.cards[i]
+            self.cardImgs[i].visible = cardType ~= nil
+            if cardType then
+                self.cardImgs[i]:setQuad(cardQuads[GoalCards.typeIndex(cardType)])
+            end
+        end
+    end
+
     prof.push("concats")
     self.element.world:setString(self:getWorldText())
     self.element.pMeter:setString(self:getPMeterText())
@@ -107,6 +130,7 @@ function Smb3Ui:update(dt)
     self.element.lives:setString(self:getLivesText())
     self.element.score:setString(self:getScoreText())
     self.element.time:setString(self:getTimeText())
+
     prof.pop()
 end
 

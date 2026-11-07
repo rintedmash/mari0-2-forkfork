@@ -67,4 +67,16 @@ function Menus:mousereleased(x, y, button)
     end
 end
 
+function Menus:textinput(text)
+    if self.canvas:roottextinput(text) then
+        return true
+    end
+end
+
+function Menus:keypressed(key)
+    if self.canvas:rootkeypressed(key) then
+        return true
+    end
+end
+
 return Menus

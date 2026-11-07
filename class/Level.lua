@@ -2,6 +2,7 @@ local Actor = require("class.Actor")
 local Level = class("Level", Physics3.World)
 local BlockBounce = require("class.BlockBounce")
 local Viewport = require("class.Viewport")
+local GoalCards = require("lib.goalcards")
 
 function Level:initialize(path, players)
     self.players = players or (game and game.players) or {}
@@ -14,6 +15,80 @@ function Level:initialize(path, players)
     self:loadLevel(data)
 
     self.timeLeft = 400
+
+    -- Items that sprout out of blocks after the block finishes bouncing
+    self.pendingSprouts = {}
+
+    -- SMB3 goal card sequence (nil unless this level has a goal card)
+    self.goalSequence = nil
+
+    -- SMB3-style level entry: the level fades in from black while the
+    -- player stands still (Palette_PrepareFadeIn / Palette_DoFadeIn, 4
+    -- discrete palette steps, 5 frames each)
+    self.entryFade = nil
+
+    self:mappackFeatureSetup()
+end
+
+-- Read mappack-level feature flags and set up SMB3-style sequences
+function Level:mappackFeatureSetup()
+    local settings = game and game.mappack and game.mappack.settings
+    if not settings then
+        return
+    end
+
+    -- Entry fade-in: fade the level in from black while the player stands
+    -- still. Skipped when arriving through a warp exit (the pipe-exit
+    -- animation plays instead, like LevelInit_PipeExit*).
+    if settings.entryFade ~= false and #self.players > 0
+        and not self.players[1].exitEntry then
+        self.entryFade = { level = 4, tick = 0 }
+        controls3.locked = true
+    end
+
+    -- Goal card sequence: card bounces around the goal marker
+    if settings.goalCards then
+        self:setupGoalSequence()
+    end
+end
+
+function Level:setupGoalSequence()
+    -- Scan the raw level entities: goal markers beyond the spawn line are not
+    -- actors yet at load time. The first goal_block anchors the sequence.
+    for _, entity in ipairs(self.currentLevel.entities or {}) do
+        if entity.type == "goal_block" then
+            local entityComponents = entity.components or {}
+            local warpArgs = entityComponents["actReact.tag.warp"]
+
+            -- The marker block is just decoration now; the card is the exit
+            entityComponents["actReact.tag.warp"] = nil
+            entity.components = entityComponents
+
+            if not self.goalSequence then
+                local cardTemplate = actorTemplates["goal_card"]
+                if cardTemplate then
+                    -- Entity coordinates are tile-based; convert to world pixels
+                    local mx, my = self:coordinateToWorld(entity.x, entity.y)
+                    local card = Actor:new(self, mx, my - 32, cardTemplate)
+                    table.insert(self.actors, card)
+                    self.goalSequence = {
+                        state = "roulette",
+                        card = card,
+                        minX = mx - 24,
+                        maxX = mx + 24,
+                        spinTimer = 0,
+                        spinSpeed = 0.08,
+                        speed = 86,
+                        face = 1,
+                        direction = 1,
+                        exit = warpArgs or nil,
+                        timer = 0,
+                    }
+                    card.goalSequence = self.goalSequence
+                end
+            end
+        end
+    end
 end
 
 function Level:loadLevel(data)
@@ -101,6 +176,8 @@ function Level:loadLevel(data)
         local player = self.players[i]
 		local mario
 		
+		player.exitEntry = player.exitId and self.exitList[player.exitId] and true or false
+
 		if player.exitId and self.exitList[player.exitId] then
 			local exitX, exitY = self:coordinateToWorld(self.exitList[player.exitId].x, self.exitList[player.exitId].y)
 			mario = Actor:new(self, exitX, exitY, actorTemplates["smb3_" .. player.powerUp])
@@ -133,8 +210,33 @@ function Level:loadLevel(data)
     self:spawnActors(self.viewports[1].camera.x/self.tileSize+self.camera.w/16+VAR("enemiesSpawnAhead"))
 end
 
+function Level:updatePendingSprouts(dt)
+	for i = #self.pendingSprouts, 1, -1 do
+		local sprout = self.pendingSprouts[i]
+		sprout.timer = sprout.timer - dt
+
+		if sprout.timer <= 0 then
+			table.remove(self.pendingSprouts, i)
+
+			if self.destroyed then
+				return
+			end
+
+			local template = actorTemplates[sprout.template]
+			if template then
+				local item = Actor:new(self, sprout.x, sprout.y, template)
+				item:addComponent(components["misc.emerge"], {rise = sprout.rise})
+				table.insert(self.actors, item)
+			end
+		end
+	end
+end
 function Level:update(dt)
     self.timeLeft = math.max(0, self.timeLeft-(60/42)*dt) -- that's 42.86% more second, per second!
+
+    self:updatePendingSprouts(dt)
+    self:updateEntryFade(dt)
+    self:updateGoalSequence(dt)
 
     prof.push("Portal Projectiles")
     updateGroup(self.portalProjectiles, dt)
@@ -189,6 +291,132 @@ function Level:update(dt)
     end
 end
 
+-- The card itself just reports contact; all sequencing lives here.
+function Level:collectGoalCard()
+    local seq = self.goalSequence
+    if not seq or seq.state ~= "roulette" then
+        return
+    end
+
+    seq.state = "collected"
+    seq.timer = 0
+    seq.stoppedFace = seq.face
+
+    -- Add the stopped card to the status-bar panel, like Player_GetCard
+    game.cardPanel = game.cardPanel or GoalCards.newPanel()
+    seq.panelSlot = GoalCards.addCard(game.cardPanel, GoalCards.TYPES[seq.face])
+
+    -- The time counts down into score while the banners run, like DoTimeBonus
+    self.timeBonusScore = math.floor(self.timeLeft) * 50
+    self.timeLeft = 0
+
+    playSound("fortress_clear")
+    playMusic(nil)
+
+    for _, viewport in ipairs(self.viewports) do
+        viewport.frozen = true
+    end
+
+    controls3.locked = true
+    controls3.clearForced()
+
+    self.players[1].score = self.players[1].score + self.timeBonusScore
+
+    seq.bannerText = "COURSE CLEAR!"
+    seq.bannerTime = 0
+end
+
+function Level:updateGoalSequence(dt)
+    local seq = self.goalSequence
+    if not seq then
+        return
+    end
+
+    seq.timer = seq.timer + dt
+
+    if seq.state == "roulette" then
+        -- Bounce the card between its bounds
+        local card = seq.card
+        card.x = card.x + seq.direction*seq.speed*dt
+        if card.x < seq.minX then
+            card.x = seq.minX
+            seq.direction = 1
+        elseif card.x > seq.maxX then
+            card.x = seq.maxX
+            seq.direction = -1
+        end
+
+        -- Cycle the card face, like EndLevelCard_SetFrameToCard
+        seq.spinTimer = seq.spinTimer + dt
+        while seq.spinTimer >= seq.spinSpeed do
+            seq.spinTimer = seq.spinTimer - seq.spinSpeed
+            seq.face = GoalCards.nextFace(seq.face)
+            card.quad = card.quads[seq.face]
+        end
+    elseif seq.state == "collected" then
+        -- "COURSE CLEAR!" -> "YOU GOT A CARD" -> lives banner -> exit
+        seq.bannerTime = seq.bannerTime + dt
+
+        if seq.bannerTime >= 2.2 and not seq.gotCardShown then
+            seq.gotCardShown = true
+            seq.bannerText = "YOU GOT A CARD"
+            seq.bannerTime = 0
+            playSound("correct")
+        elseif seq.gotCardShown and seq.bannerTime >= 2 and not seq.award then
+            seq.award = GoalCards.evaluate(game.cardPanel)
+            seq.bannerTime = 0
+
+            if seq.award > 0 then
+                seq.bannerText = seq.award == 1 and "1 LIFE!" or (seq.award .. " LIVES!")
+                self.players[1].lives = self.players[1].lives + seq.award
+                playSound("one_up")
+            end
+        elseif seq.award ~= nil and seq.bannerTime >= 1.5 then
+            self:finishGoalSequence()
+        end
+    end
+end
+
+function Level:finishGoalSequence()
+    local seq = self.goalSequence
+    controls3.locked = false
+    controls3.clearForced()
+
+    for _, viewport in ipairs(self.viewports) do
+        viewport.frozen = false
+    end
+
+    seq.card:destroy()
+    self.goalSequence = nil
+
+    local exit = seq.exit
+    if exit and exit.level then
+        game:changeLevel(exit.level)
+    else
+        game:changeLevel(nil)
+    end
+end
+
+function Level:updateEntryFade(dt)
+    local fade = self.entryFade
+    if not fade then
+        return
+    end
+
+    -- Palette_DoFadeIn: Fade_Tick reloads to 4 and Fade_Level decrements
+    -- every 5 frames; at Fade_Level 0 the fade ends and control unlocks
+    fade.tick = fade.tick + dt*60
+    while fade.tick >= 5 and fade.level > 0 do
+        fade.tick = fade.tick - 5
+        fade.level = fade.level - 1
+    end
+
+    if fade.level <= 0 then
+        self.entryFade = nil
+        controls3.locked = false
+    end
+end
+
 function Level:draw()
     for _, viewport in ipairs(self.viewports) do
         viewport.camera:attach()
@@ -196,6 +424,22 @@ function Level:draw()
         Physics3.World.draw(self)
 
         viewport.camera:detach()
+    end
+
+    -- Entry fade-in: 4 discrete black overlay steps, like the NES palette fade
+    if self.entryFade then
+        love.graphics.setColor(0, 0, 0, self.entryFade.level/4)
+        love.graphics.rectangle("fill", 0, 0, SCREENWIDTH, SCREENHEIGHT)
+        love.graphics.setColor(1, 1, 1)
+    end
+
+    -- Goal sequence banners ("COURSE CLEAR!" / "YOU GOT A CARD" / "N LIVES!")
+    if self.goalSequence and self.goalSequence.bannerText then
+        love.graphics.setFont(fontOutlined)
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.print(self.goalSequence.bannerText,
+            math.floor((SCREENWIDTH - love.graphics.getFont():getWidth(self.goalSequence.bannerText)*2)/2),
+            56, 0, 2, 2)
     end
 end
 
@@ -276,8 +520,15 @@ function Level:bumpBlock(cell, actor, dontBreak)
 			if item == "coin" then
 				self:collectCoin(actor)
 			else
-				local sprout = Actor:new(self, cell.x*16-8, (cell.y-1)*16, actorTemplates[item])
-				table.insert(self.actors, sprout)
+				-- The item rises out of the block once the block is done
+				-- bouncing, like in SMB3 (until then it stays hidden inside)
+				table.insert(self.pendingSprouts, {
+					timer = VAR("blockBounceTime"),
+					x = cell.x*16-8,
+					y = (cell.y+1)*16,
+					rise = 16,
+					template = item,
+				})
 				playSound("mushroom_appear")
 			end
 			-- Turn it into another tile
@@ -326,8 +577,14 @@ function Level:bounceOnBlock(cell, actor)
         if item == "coin" then
             self:collectCoin(actor)
 		elseif item then
-			local sprout = Actor:new(self, cell.x*16-8, (cell.y+1)*16, actorTemplates[item])
-			table.insert(self.actors, sprout)
+			-- Noteblocks push the item out below, once the bounce is done
+			table.insert(self.pendingSprouts, {
+				timer = VAR("blockBounceTime"),
+				x = cell.x*16-8,
+				y = (cell.y+2)*16,
+				rise = -16,
+				template = item,
+			})
 			playSound("mushroom_appear")
         end
 	end

@@ -4,6 +4,28 @@
 local controls3 = {}
 local cmds = {}
 local virtualCmds = {}
+local forcedCmds = {}
+
+-- When true, all player input (keyboard and virtual) is suppressed.
+-- Used by scripted sequences like the SMB3 goal card fanfare.
+controls3.locked = false
+
+-- Force a command on or off, overriding real input, virtual (touch)
+-- commands and controls3.locked. state = true/false forces, nil releases.
+-- Used by scripted sequences that need to steer the player (entry walk-in).
+function controls3.forceCmd(cmd, state)
+    if state == nil then
+        forcedCmds[cmd] = nil
+    else
+        forcedCmds[cmd] = not not state
+    end
+end
+
+function controls3.clearForced()
+    for cmd in pairs(forcedCmds) do
+        forcedCmds[cmd] = nil
+    end
+end
 
 local function assignCmd(v, cmd)
     if controls3.cmdTableLookup[cmd] then
@@ -91,6 +113,14 @@ end
 
 -- ^ctrl !alt +shift
 function controls3.cmdDown(cmd)
+    if forcedCmds[cmd] ~= nil then
+        return forcedCmds[cmd]
+    end
+
+    if controls3.locked then
+        return false
+    end
+
     if virtualCmds[cmd] then
         return true
     end

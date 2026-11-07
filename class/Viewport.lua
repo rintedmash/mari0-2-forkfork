@@ -43,6 +43,10 @@ function Viewport:draw()
 end
 
 function Viewport:update(dt)
+    if self.frozen then
+        return
+    end
+
     if self.target then
         -- Horizontal
         local pX = self.target.x + self.target.width/2

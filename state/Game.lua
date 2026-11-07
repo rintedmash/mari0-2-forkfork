@@ -6,9 +6,14 @@ local LevelEdit = require "class.LevelEdit"
 local Mappack = require "class.Mappack"
 local TouchControls = require "lib.TouchControls"
 
+local GoalCards = require "lib.goalcards"
+
 local Game = class("Game")
 
 function Game:initialize(mappack, playerCount, editorEnabled, levelPath)
+    -- SMB3 status-bar card panel, carried across the mappack's levels
+    self.cardPanel = GoalCards.newPanel()
+
     -- Create player objects
     self.players = {}
     for i = 1, playerCount do
